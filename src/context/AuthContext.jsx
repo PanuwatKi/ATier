@@ -95,7 +95,7 @@ export function AuthProvider({ children }) {
     signUp,
     logIn,
     logout, 
-    SignOut: logout,
+    signOut: logout,
     loginWithGoogle,
     loading
   };
