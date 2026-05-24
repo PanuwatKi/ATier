@@ -9,7 +9,7 @@ export default function GoogleButton() {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: 'https://atier-web.vercel.app/', // URL ที่จะกลับมาหลัง Login
+        redirectTo: window.location.origin, // URL ที่จะกลับมาหลัง Login
       },
     });
 
