@@ -2,642 +2,647 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, Play, FileText, Download, CheckCircle, ChevronRight, 
   ChevronDown, ArrowLeft, Bookmark, Shield, Plus, Clock, 
-  BookOpen, Award, Video, Trash2, Eye, EyeOff, FolderPlus, Link2, Upload
+  BookOpen, Award, Video, Trash2, Eye, EyeOff, FolderPlus, Link2, Upload, Image as ImageIcon
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext'; 
-
-const INITIAL_COURSES = [
-  {
-    id: "toi-mastery",
-    title: "POSN Computer Camp 2: Advanced Algorithm Design",
-    description: "เจาะลึกการออกแบบอัลกอริทึมระดับสูง Master dynamic programming, complex bitmask layouts, และ shortest path graph สำหรับการแข่งขันสอวน. คอมพิวเตอร์ ค่าย 2",
-    imageUrl: "https://images.unsplash.com/photo-1515879218367-8466d910aaa4?q=80&w=600&auto=format&fit=crop",
-    category: "Informatics",
-    instructor: "Ajarn ATier",
-    isHidden: false,
-    lectures: [
-      { id: "l1", title: "Tape 1: Bitmask Dynamic Programming Mechanics", duration: "1h 45m", videoId: "dQw4w9WgXcQ", materials: [{ name: "Bitmask_DP_Handout.pdf", data: "" }, { name: "Problem_Set_1.pdf", data: "" }] },
-      { id: "l2", title: "Tape 2: Dijkstra vs. Bellman-Ford State Spaces", duration: "2h 10m", videoId: "dQw4w9WgXcQ", materials: [{ name: "Graph_Theory_Advanced.pdf", data: "" }] }
-    ]
-  }
-];
+import { supabase } from '../supabaseClient';
 
 export default function Courses() {
-  // --- SUPABASE ROLE & AUTHORIZATION CENTRAL SYSTEM ---
   const { user, role } = useAuth(); 
-  const [isAdminModeActive, setIsAdminModeActive] = useState(false); 
+  const isAdmin = role === 'Super Admin' || role === 'Admin';
 
-  // เช็คระดับสิทธิ์จาก Database และ Enum ของ Supabase (สอดคล้องกับภาพที่ 3 ตัวพิมพ์เล็ก/ใหญ่ต้องตรงกัน)
-  // หมายเหตุ: ในภาพที่ 3 ค่าที่บันทึกคือ 'Admin' และ 'Super Admin' (ตัวแรกเป็นพิมพ์ใหญ่) 
-  const isAdminUser = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin';
-
-  useEffect(() => {
-    if (!isAdminUser) {
-      setIsAdminModeActive(false);
-    }
-  }, [role, isAdminUser]);
-
-  // --- LOCAL STORAGE CORE SYNCHRONIZATION ---
-  const [courses, setCourses] = useState(() => {
-    const savedCourses = localStorage.getItem('atier_courses');
-    return savedCourses ? JSON.parse(savedCourses) : INITIAL_COURSES;
-  });
-
-  const [completedLectures, setCompletedLectures] = useState(() => {
-    const savedProgress = localStorage.getItem('atier_completed_lectures');
-    return savedProgress ? JSON.parse(savedProgress) : {};
-  });
-
-  const [lastWatchedTape, setLastWatchedTape] = useState(() => {
-    const savedLastWatched = localStorage.getItem('atier_last_watched');
-    return savedLastWatched ? JSON.parse(savedLastWatched) : {};
-  });
-
-  const [checkpoints, setCheckpoints] = useState({});
+  // --- States สำหรับจัดการข้อมูลคอร์ส ---
+  const [courses, setCourses] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCourse, setSelectedCourse] = useState(null);
-  const [currentLecture, setCurrentLecture] = useState(null);
-  const [expandedLecture, setExpandedLecture] = useState(null);
-  const [mockTime, setMockTime] = useState("00:00:00");
-  const [activeCheckpointMsg, setActiveCheckpointMsg] = useState("");
+  const [activeVideo, setActiveVideo] = useState(null);
 
-  const [newCourse, setNewCourse] = useState({ title: '', category: '', instructor: '', imageUrl: '', description: '' });
-  const [newTape, setNewTape] = useState({ title: '', duration: '1h 30m', videoUrl: '' });
-  const [uploadedMaterials, setUploadedMaterials] = useState([]); 
+  // --- States สำหรับฟอร์มเพิ่มเทปเรียน (Admin Panel) ---
+  const [selectedCourseId, setSelectedCourseId] = useState('');
+  const [tapeTitle, setTapeTitle] = useState('');
+  const [tapeDuration, setTapeDuration] = useState('');
+  const [tapeVideoId, setTapeVideoId] = useState('');
+  const [uploadedMaterials, setUploadedMaterials] = useState([]);
 
-  useEffect(() => {
-    localStorage.setItem('atier_courses', JSON.stringify(courses));
-  }, [courses]);
+  // --- States สำหรับสร้างคอร์สใหม่ + ไฟล์รูปภาพหน้าปก ---
+  const [newCourseId, setNewCourseId] = useState('');
+  const [newCourseTitle, setNewCourseTitle] = useState('');
+  const [newCourseDesc, setNewCourseDesc] = useState('');
+  const [newCourseCategory, setNewCourseCategory] = useState('Informatics');
+  const [newCourseInstructor, setNewCourseInstructor] = useState('Ajarn ATier');
+  const [courseCoverFile, setCourseCoverFile] = useState(null); // 👈 สเตทสำหรับเก็บไฟล์รูปภาพจากเครื่อง
+  const [actionLoading, setActionLoading] = useState(false);   // สเตทสปินเนอร์ตอนกดยิงคำสั่งแอดมิน
 
-  useEffect(() => {
-    localStorage.setItem('atier_completed_lectures', JSON.stringify(completedLectures));
-  }, [completedLectures]);
+  // ==========================================
+  // 1. ฟังก์ชันดึงข้อมูลจาก Supabase (Fetch Data)
+  // ==========================================
+  const fetchCourses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('courses')
+        .select('*')
+        .order('created_at', { ascending: true });
+      
+      if (error) throw error;
+      
+      const formattedData = data.map(course => ({
+        id: course.id,
+        title: course.title,
+        description: course.description,
+        imageUrl: course.image_url,
+        category: course.category,
+        instructor: course.instructor,
+        isHidden: course.is_hidden,
+        lectures: course.lectures || []
+      }));
+      
+      setCourses(formattedData);
 
-  useEffect(() => {
-    localStorage.setItem('atier_last_watched', JSON.stringify(lastWatchedTape));
-  }, [lastWatchedTape]);
-
-  const extractYouTubeId = (url) => {
-    if (!url) return "dQw4w9WgXcQ"; 
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : url;
-  };
-
-  const handleCoverImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setNewCourse(prev => ({ ...prev, imageUrl: reader.result }));
-      };
-      reader.readAsDataURL(file);
+      if (selectedCourse) {
+        const updatedCurrent = formattedData.find(c => c.id === selectedCourse.id);
+        if (updatedCurrent) setSelectedCourse(updatedCurrent);
+      }
+    } catch (err) {
+      console.error("Error fetching courses:", err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
+  // ==========================================
+  // 2. ตั้งค่าระบบ Real-time ซิงค์ข้อมูลข้ามเครื่อง
+  // ==========================================
+  useEffect(() => {
+    fetchCourses();
+
+    const courseChannel = supabase
+      .channel('realtime-courses-channel')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'courses' },
+        (payload) => {
+          fetchCourses();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(courseChannel);
+    };
+  }, [selectedCourse?.id]);
+
+  // ==========================================
+  // 3. ฟังก์ชันสำหรับแอดมิน (Admin Functions)
+  // ==========================================
+  
   const handleMaterialsUpload = (e) => {
     const files = Array.from(e.target.files);
-    const promises = files.map(file => {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          resolve({ name: file.name, data: reader.result });
-        };
-        reader.readAsDataURL(file);
-      });
-    });
-
-    Promise.all(promises).then(results => {
-      setUploadedMaterials(results);
-    });
+    const mockMaterials = files.map(file => ({
+      name: file.name,
+      data: "#"
+    }));
+    setUploadedMaterials(mockMaterials);
   };
 
-  const handleSelectCourse = (course) => {
-    setSelectedCourse(course);
-    setActiveCheckpointMsg("");
-    const lastTapeId = lastWatchedTape[course.id];
-    const savedLecture = course.lectures.find(l => l.id === lastTapeId);
-    const targetLecture = savedLecture || course.lectures[0] || null;
-    setCurrentLecture(targetLecture);
-    setExpandedLecture(targetLecture?.id || null);
-    if (targetLecture && checkpoints[targetLecture.id]) {
-      setActiveCheckpointMsg(`Resumed from your saved checkpoint at ${checkpoints[targetLecture.id]}`);
-    }
-  };
-
-  const handleSelectLecture = (lecture) => {
-    setCurrentLecture(lecture);
-    setActiveCheckpointMsg("");
-    setLastWatchedTape(prev => ({ ...prev, [selectedCourse.id]: lecture.id }));
-    if (checkpoints[lecture.id]) {
-      setActiveCheckpointMsg(`Resumed from your saved checkpoint at ${checkpoints[lecture.id]}`);
-    } else {
-      setMockTime(`00:${Math.floor(Math.random() * 40) + 10}:15`);
-    }
-  };
-
-  const toggleLectureCompletion = (lectureId, e, courseId) => {
-    if (e) e.stopPropagation();
-    setCompletedLectures(prev => ({ ...prev, [lectureId]: !prev[lectureId] }));
-    if (courseId) {
-      setLastWatchedTape(prev => ({ ...prev, [courseId]: lectureId }));
-    }
-  };
-
-  const getCourseProgress = (course) => {
-    if (!course?.lectures?.length) return 0;
-    const finishedCount = course.lectures.filter(l => completedLectures[l.id]).length;
-    return Math.round((finishedCount / course.lectures.length) * 100);
-  };
-
-  const saveCurrentCheckpoint = () => {
-    if (!currentLecture) return;
-    const generatedTimestamp = mockTime === "00:00:00" ? "00:42:19" : mockTime;
-    setCheckpoints(prev => ({ ...prev, [currentLecture.id]: generatedTimestamp }));
-    setActiveCheckpointMsg(`Progress checkpoint saved securely at ${generatedTimestamp}!`);
-  };
-
-  const handleCreateCourse = (e) => {
+  // 3.1 ฟังก์ชันเพิ่มเทปเรียนใหม่เข้าคอร์ส
+  const handleAddTapeSubmit = async (e) => {
     e.preventDefault();
-    if (!isAdminUser) return; 
-    if (!newCourse.title || !newCourse.description) return;
+    if (!selectedCourseId || !tapeTitle || !tapeVideoId) {
+      alert("กรุณากรอกข้อมูลเทปเรียนให้ครบถ้วน");
+      return;
+    }
 
-    const createdItem = {
-      id: `course-${Date.now()}`,
-      title: newCourse.title,
-      description: newCourse.description,
-      category: newCourse.category || "General Context",
-      instructor: newCourse.instructor || "Guest Lecturer",
-      imageUrl: newCourse.imageUrl || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600",
-      isHidden: false,
-      lectures: []
-    };
+    setActionLoading(true);
+    try {
+      const targetCourse = courses.find(c => c.id === selectedCourseId);
+      if (!targetCourse) return;
 
-    setCourses([createdItem, ...courses]);
-    setNewCourse({ title: '', category: '', instructor: '', imageUrl: '', description: '' });
-    e.target.reset();
-  };
+      const newLecture = {
+        id: `l_${Date.now()}`,
+        title: tapeTitle,
+        duration: tapeDuration || "1h 30m",
+        videoId: tapeVideoId,
+        materials: uploadedMaterials
+      };
 
-  const handleDeleteCourse = (courseId, e) => {
-    e.stopPropagation();
-    if (!isAdminUser) return;
-    if (window.confirm("คุณต้องการลบคอร์สเรียนนี้รวมถึงเทปเรียนทั้งหมดใช่หรือไม่?")) {
-      setCourses(courses.filter(c => c.id !== courseId));
-      if (selectedCourse?.id === courseId) setSelectedCourse(null);
+      const updatedLectures = [...targetCourse.lectures, newLecture];
+
+      const { error } = await supabase
+        .from('courses')
+        .update({ lectures: updatedLectures })
+        .eq('id', selectedCourseId);
+
+      if (error) throw error;
+
+      setTapeTitle('');
+      setTapeDuration('');
+      setTapeVideoId('');
+      setUploadedMaterials([]);
+      alert("เพิ่มเทปเรียนใหม่สำเร็จ!");
+    } catch (err) {
+      alert(`ล้มเหลว: ${err.message}\n💡 แนะนำให้ตรวจสอบสิทธิ์ RLS Policy (สิทธิ์การ Update ตาราง courses) บน Supabase ด้วยครับ`);
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  const toggleCourseVisibility = (courseId, e) => {
-    e.stopPropagation();
-    if (!isAdminUser) return;
-    setCourses(courses.map(c => c.id === courseId ? { ...c, isHidden: !c.isHidden } : c));
+  // 3.2 ฟังก์ชันสลับการซ่อน/แสดงคอร์ส
+  const toggleCourseVisibility = async (courseId, currentStatus) => {
+    const { error } = await supabase
+      .from('courses')
+      .update({ is_hidden: !currentStatus })
+      .eq('id', courseId);
+
+    if (error) alert("ล้มเหลว: " + error.message);
   };
 
-  const handleAddTape = (e) => {
+  // 3.3 ฟังก์ชันลบเทปเรียนออกจากคอร์ส
+  const handleDeleteLecture = async (courseId, lectureId) => {
+    if (!window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบเทปเรียนนี้?")) return;
+
+    const targetCourse = courses.find(c => c.id === courseId);
+    if (!targetCourse) return;
+
+    const filteredLectures = targetCourse.lectures.filter(l => l.id !== lectureId);
+
+    const { error } = await supabase
+      .from('courses')
+      .update({ lectures: filteredLectures })
+      .eq('id', courseId);
+
+    if (error) alert("ไม่สามารถลบได้: " + error.message);
+  };
+
+  // 3.4 🔥 [อัปเดตใหม่] ฟังก์ชันสร้างคอร์สใหม่ + อัปโหลดรูปภาพปกจากในเครื่อง
+  const handleCreateCourseSubmit = async (e) => {
     e.preventDefault();
-    if (!isAdminUser) return;
-    if (!newTape.title || !selectedCourse) return;
+    if (!newCourseId || !newCourseTitle) {
+      alert("กรุณากรอก ไอดีคอร์ส และ ชื่อคอร์ส ให้เรียบร้อย");
+      return;
+    }
 
-    const createdTape = {
-      id: `tape-${Date.now()}`,
-      title: `Tape ${selectedCourse.lectures.length + 1}: ${newTape.title}`,
-      duration: newTape.duration || "1h 30m",
-      videoId: extractYouTubeId(newTape.videoUrl),
-      materials: uploadedMaterials.length > 0 ? uploadedMaterials : [{ name: "Course_Reference_Handout.pdf", data: "" }]
-    };
+    setActionLoading(true);
 
-    const updatedCatalog = courses.map(c => {
-      if (c.id === selectedCourse.id) {
-        return { ...c, lectures: [...c.lectures, createdTape] };
+    try {
+      // 1. ตั้งค่ารูปภาพเริ่มต้นเผื่อผู้ใช้ไม่ได้อัปโหลดภาพขึ้นมา
+      let finalImageUrl = "https://images.unsplash.com/photo-1515879218367-8466d910aaa4?q=80&w=600&auto=format&fit=crop";
+
+      // 2. ถ้ามีการเลือกไฟล์ภาพจากเครื่อง ให้ทำการอัปโหลดเข้า Supabase Storage ก่อน
+      if (courseCoverFile) {
+        const fileExt = courseCoverFile.name.split('.').pop();
+        const fileName = `${newCourseId}-${Date.now()}.${fileExt}`;
+        const filePath = `covers/${fileName}`;
+
+        // ยิงไฟล์ขึ้น Storage Bucket ชื่อ 'course-assets'
+        const { data: storageData, error: storageError } = await supabase.storage
+          .from('course-assets')
+          .upload(filePath, courseCoverFile);
+
+        if (storageError) {
+          throw new Error(`ปัญหาด้าน Storage: ${storageError.message} (กรุณาเช็คว่าสร้าง Bucket ชื่อ 'course-assets' บนระบบหลังบ้านหรือยัง)`);
+        }
+
+        // ดึง Public URL ของรูปภาพเพื่อไปเซฟลงในตารางหลัก
+        const { data: urlData } = supabase.storage
+          .from('course-assets')
+          .getPublicUrl(filePath);
+
+        finalImageUrl = urlData.publicUrl;
       }
-      return c;
-    });
 
-    setCourses(updatedCatalog);
-    setSelectedCourse(updatedCatalog.find(c => c.id === selectedCourse.id));
-    setNewTape({ title: '', duration: '1h 30m', videoUrl: '' });
-    setUploadedMaterials([]);
-    e.target.reset();
-  };
+      // 3. เขียนคำสั่งบันทึกลงฐานข้อมูล SQL (ตาราง courses)
+      const { error: dbError } = await supabase
+        .from('courses')
+        .insert([{
+          id: newCourseId,
+          title: newCourseTitle,
+          description: newCourseDesc,
+          image_url: finalImageUrl,
+          category: newCourseCategory,
+          instructor: newCourseInstructor,
+          is_hidden: false,
+          lectures: []
+        }]);
 
-  const handleDeleteTape = (tapeId) => {
-    if (!isAdminUser) return;
-    if (!window.confirm("ต้องการลบเทปเรียนนี้ออกใช่หรือไม่?")) return;
+      if (dbError) throw dbError;
 
-    const updatedCatalog = courses.map(c => {
-      if (c.id === selectedCourse.id) {
-        return { ...c, lectures: c.lectures.filter(l => l.id !== tapeId) };
-      }
-      return c;
-    });
+      // ล้างค่าฟอร์มทั้งหมดเมื่อทำสำเร็จ
+      setNewCourseId('');
+      setNewCourseTitle('');
+      setNewCourseDesc('');
+      setCourseCoverFile(null);
+      
+      // รีเซ็ตหน้าต่าง Input File ด้วยวิธีเคลียร์ค่า HTML element
+      const fileInput = document.getElementById('cover-upload-input');
+      if (fileInput) fileInput.value = '';
 
-    setCourses(updatedCatalog);
-    const refreshedCourse = updatedCatalog.find(c => c.id === selectedCourse.id);
-    setSelectedCourse(refreshedCourse);
-    if (currentLecture?.id === tapeId) {
-      setCurrentLecture(refreshedCourse.lectures[0] || null);
+      alert("🎉 สร้างคอร์สเรียนใหม่และอัปโหลดรูปภาพหน้าปกสำเร็จ!");
+    } catch (err) {
+      console.error(err);
+      alert(`❌ ไม่สามารถสร้างคอร์สได้เนื่องจาก:\n${err.message}\n\n💡 คำแนะนำข้อผิดพลาด: หากขึ้นเกี่ยวกับพาสเวิร์ด/สิทธิ์ ให้ไปเช็คหน้าตาราง Supabase ว่าได้เปิดสิทธิ์ RLS Policy ตาราง courses สำหรับเปิดสิทธิ์แอดมิน INSERT หรือยังครับ`);
+    } finally {
+      setActionLoading(false);
     }
   };
 
+  // --- กรองข้อมูลด้วยคำค้นหา ---
   const filteredCourses = courses.filter(course => {
-    const matchSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                        course.description.toLowerCase().includes(searchQuery.toLowerCase());
-    if (isAdminUser && isAdminModeActive) return matchSearch; 
-    return matchSearch && !course.isHidden; 
+    const matchesSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          course.description.toLowerCase().includes(searchQuery.toLowerCase());
+    return isAdmin ? matchesSearch : (matchesSearch && !course.isHidden);
   });
 
-  return (
-    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-50 transition-colors duration-200">
-      
-      <div className="max-w-7xl mx-auto px-4 pt-10 pb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200/60 dark:border-zinc-900/60">
-        <div>
-          <span className="text-xs font-bold tracking-widest text-blue-600 dark:text-blue-400 uppercase flex items-center gap-1.5">
-            <Award className="w-4 h-4" /> High-Performance Learning Ecosystem
-          </span>
-          <h1 className="text-3xl font-extrabold tracking-tight mt-1">OnDemand Portal Console</h1>
-        </div>
-
-        {isAdminUser && (
-          <button 
-            onClick={() => setIsAdminModeActive(!isAdminModeActive)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold border text-xs transition-all shadow-sm ${
-              isAdminModeActive 
-                ? 'bg-amber-500 border-amber-600 text-white shadow-amber-500/10' 
-                : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-100'
-            }`}
-          >
-            <Shield className="w-3.5 h-3.5" />
-            <span>{isAdminModeActive ? 'BACKOFFICE CONTROL ACTIVE' : 'STUDENT MODE VIEW'}</span>
-          </button>
-        )}
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-amber-500"></div>
+        <p className="ml-3 text-sm font-semibold text-slate-500">กำลังดาวน์โหลดบทเรียนเรียลไทม์...</p>
       </div>
+    );
+  }
 
-      {!selectedCourse ? (
-        <div className="max-w-7xl mx-auto px-4 py-10 space-y-8">
-          {isAdminUser && isAdminModeActive && (
-            <div className="bg-white dark:bg-zinc-900 border border-amber-500/30 rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-zinc-800">
-                <FolderPlus className="w-5 h-5 text-amber-500" />
-                <h2 className="text-base font-bold text-slate-800 dark:text-zinc-100 uppercase tracking-wide">Backoffice: Upload New Course Catalogue</h2>
-              </div>
-              <form onSubmit={handleCreateCourse} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-2 space-y-3">
-                  <input 
-                    type="text" required placeholder="ชื่อคอร์สเรียน (Course Title)" 
-                    value={newCourse.title} onChange={e => setNewCourse({...newCourse, title: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-amber-500"
-                  />
-                  <textarea 
-                    required placeholder="คำอธิบายรายละเอียดวิชาเชิงลึกด้านล่างคอร์สเรียน..." rows="3"
-                    value={newCourse.description} onChange={e => setNewCourse({...newCourse, description: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-                <div className="space-y-3 flex flex-col justify-between">
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-bold text-slate-500 dark:text-zinc-400 flex items-center gap-1"><Upload className="w-3 h-3"/> อัปโหลดรูปปกคอร์สเรียน</label>
-                    <input 
-                      type="file" accept="image/*" required
-                      onChange={handleCoverImageUpload}
-                      className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200 cursor-pointer"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input 
-                      type="text" placeholder="หมวดหมู่ (Category)" 
-                      value={newCourse.category} onChange={e => setNewCourse({...newCourse, category: e.target.value})}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-amber-500"
-                    />
-                    <input 
-                      type="text" placeholder="ผู้สอน (Instructor)" 
-                      value={newCourse.instructor} onChange={e => setNewCourse({...newCourse, instructor: e.target.value})}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                  <button type="submit" className="w-full py-2.5 bg-amber-500 text-slate-950 font-bold text-sm rounded-xl hover:bg-amber-400 transition-colors shadow-lg flex items-center justify-center gap-1">
-                    <Plus className="w-4 h-4 stroke-[3]" /> Deploy New Course
-                  </button>
-                </div>
-              </form>
+  return (
+    <div className="space-y-8 max-w-7xl mx-auto px-1">
+      
+      {!selectedCourse && (
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-6 border-slate-100 dark:border-zinc-800/60">
+          <div>
+            <div className="flex items-center gap-2 text-amber-500 dark:text-amber-400 font-bold text-xs uppercase tracking-wider mb-1">
+              <BookOpen className="w-3.5 h-3.5" /> ATier Learning Ecosystem
             </div>
-          )}
+            <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white sm:text-4xl">
+              Premium Courses
+            </h1>
+            <p className="mt-2 text-sm text-slate-500 dark:text-zinc-400 max-w-xl">
+              เจาะลึกบทเรียน พัฒนาทักษะ และคลังเครื่องมือสำหรับการแข่งขันระดับประเทศ ซิงค์ข้อมูลทันทีข้ามทุกแพลตฟอร์ม
+            </p>
+          </div>
 
-          <div className="max-w-md bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-2 flex items-center gap-2 shadow-sm focus-within:border-blue-500 transition-colors">
-            <Search className="w-5 h-5 text-slate-400 ml-2" />
-            <input 
-              type="text" placeholder="Find Courses..." value={searchQuery}
+          <div className="relative w-full md:w-80">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="ค้นหาบทเรียนหรือคอร์ส..."
+              value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-transparent text-sm text-slate-800 dark:text-zinc-200 focus:outline-none pr-2"
+              className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:border-amber-500 dark:focus:border-amber-400 transition-colors"
             />
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCourses.map((course) => {
-              const progressPercent = getCourseProgress(course);
-              return (
-                <div
-                  key={course.id} onClick={() => handleSelectCourse(course)}
-                  className="group bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800/80 rounded-2xl shadow-sm hover:shadow-xl hover:border-slate-300 dark:hover:border-zinc-700 transition-all duration-300 overflow-hidden cursor-pointer flex flex-col justify-between relative"
-                >
-                  <div>
-                    <div className="h-44 overflow-hidden relative bg-slate-100 dark:bg-zinc-800">
-                      <img 
-                        src={course.imageUrl} alt={course.title} 
-                        className="w-full h-full object-cover transform transition-transform duration-300"
-                      />
-                      <div className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md">
-                        {course.category}
-                      </div>
-                      {isAdminUser && isAdminModeActive && (
-                        <div className="absolute top-3 right-3 flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-                          <button 
-                            onClick={(e) => toggleCourseVisibility(course.id, e)}
-                            className={`p-1.5 rounded-lg backdrop-blur-md text-white transition-colors ${course.isHidden ? 'bg-amber-600' : 'bg-slate-900/80 hover:bg-slate-800'}`}
-                            title={course.isHidden ? "คลิกเพื่อแสดงคอร์สสำหรับผู้เรียน" : "คลิกเพื่อซ่อนคอร์สเรียนนี้"}
-                          >
-                            {course.isHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                          </button>
-                          <button 
-                            onClick={(e) => handleDeleteCourse(course.id, e)}
-                            className="p-1.5 rounded-lg bg-red-600/90 hover:bg-red-600 backdrop-blur-md text-white transition-colors"
-                            title="ลบคอร์สเรียนนี้ออกจากระบบ"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-5 space-y-2">
-                      <div className="flex justify-between items-center">
-                        <p className="text-xs font-semibold text-slate-400 dark:text-zinc-500">{course.instructor}</p>
-                        {course.isHidden && <span className="text-[9px] bg-amber-500/20 border border-amber-500/30 text-amber-600 font-bold px-1.5 py-0.5 rounded">HIDDEN FROM STUDENTS</span>}
-                      </div>
-                      <h3 className="text-lg font-bold text-slate-800 dark:text-zinc-100 tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-1">
-                        {course.title}
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-zinc-400 font-normal leading-relaxed line-clamp-2">
-                        {course.description}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="px-5 pb-5 pt-2 border-t border-slate-50 dark:border-zinc-800/60 space-y-2 bg-slate-50/50 dark:bg-zinc-900/30">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-400 dark:text-zinc-500 flex items-center gap-1">
-                        <BookOpen className="w-3.5 h-3.5" /> {course.lectures?.length || 0} Lectures
-                      </span>
-                      <span className="font-bold text-blue-600 dark:text-blue-400">{progressPercent}% เรียนเสร็จสิ้น</span>
-                    </div>
-                    <div className="w-full bg-slate-200 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
-                      <div 
-                        className="bg-gradient-to-r from-blue-500 to-indigo-600 h-full rounded-full transition-all duration-500"
-                        style={{ width: `${progressPercent}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </div>
-      ) : (
-        <div className="max-w-7xl mx-auto px-4 py-8">
+      )}
+
+      {/* ================================================ */}
+      {/* หน้าเจาะลึกแสดงเทปเรียนภายในคอร์ส (Course Details View) */}
+      {/* ================================================ */}
+      {selectedCourse ? (
+        <div className="space-y-6 animate-fade-in">
           <button 
-            onClick={() => setSelectedCourse(null)}
-            className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white mb-6 bg-white dark:bg-zinc-900 px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm transition-all"
+            onClick={() => { setSelectedCourse(null); setActiveVideo(null); }}
+            className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
           >
-            <ArrowLeft className="w-3.5 h-3.5" /> แผงควบคุมหน้าหลัก (Dashboard)
+            <ArrowLeft className="w-4 h-4 stroke-[3]" /> Back to All Courses
           </button>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-            <div className="lg:col-span-2 space-y-4">
-              <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black border border-slate-200 dark:border-zinc-800 shadow-xl group">
-                {currentLecture ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-6">
+              {activeVideo ? (
+                <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-lg border dark:border-zinc-800">
                   <iframe
-                    title={currentLecture.title}
-                    src={`https://www.youtube.com/embed/${currentLecture.videoId}?autoplay=1&modestbranding=1&rel=0`}
-                    className="w-full h-full border-0 absolute inset-0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    src={`https://www.youtube.com/embed/${activeVideo.videoId}?autoplay=1`}
+                    title={activeVideo.title}
+                    className="w-full h-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
                   ></iframe>
-                ) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-zinc-900 text-zinc-400">
-                    <Video className="w-12 h-12 text-slate-600 animate-bounce mb-3" />
-                    <p className="text-sm font-semibold text-white">คอร์สเรียนนี้ยังไม่มีเทปคำบรรยายวิชาเรียน</p>
-                  </div>
-                )}
-              </div>
-
-              {activeCheckpointMsg && (
-                <div className="p-3 bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-medium">
-                  {activeCheckpointMsg}
+                </div>
+              ) : (
+                <div className="aspect-video bg-slate-100 dark:bg-zinc-900/60 rounded-2xl flex flex-col items-center justify-center border-2 border-dashed border-slate-200 dark:border-zinc-800 text-center p-6">
+                  <Video className="w-12 h-12 text-slate-300 dark:text-zinc-700 mb-3" />
+                  <h3 className="font-bold text-base text-slate-700 dark:text-zinc-300">พร้อมเริ่มต้นการเรียนรู้หรือยัง?</h3>
+                  <p className="text-xs text-slate-400 max-w-xs mt-1">เลือกรายการเทปเรียนทางด้านขวาเพื่อเริ่มต้นเปิดวีดีโอบทเรียนและเข้าถึงเอกสารฝึกฝน</p>
                 </div>
               )}
 
-              <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div className="space-y-1">
-                  <h2 className="text-xl font-bold tracking-tight">{currentLecture?.title || "โปรดคลิกเลือกเทปจากรายการเมนูเพื่อเริ่มเรียน"}</h2>
-                  <p className="text-xs text-slate-400 dark:text-zinc-500 flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5" /> ระยะเวลารันไทม์บันทึกเทปสอน: {currentLecture?.duration || "0h 00m"}
-                  </p>
+              <div className="p-6 border rounded-2xl bg-white dark:bg-zinc-900/20 border-slate-100 dark:border-zinc-800/80">
+                <div className="flex flex-wrap gap-2 mb-3">
+                  <span className="px-2.5 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-400 font-bold text-[10px] tracking-wide uppercase">
+                    {selectedCourse.category}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 text-[10px] font-medium">
+                    Instructor: {selectedCourse.instructor}
+                  </span>
                 </div>
-                {currentLecture && (
-                  <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
-                    <button
-                      onClick={saveCurrentCheckpoint}
-                      className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 transition-colors"
-                    >
-                      <Bookmark className="w-3.5 h-3.5 text-amber-500" />
-                      <span>บันทึกชั่วโมงล่าสุด</span>
-                    </button>
-                    <button
-                      onClick={() => toggleLectureCompletion(currentLecture.id, null, selectedCourse.id)}
-                      className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl transition-all ${
-                        completedLectures[currentLecture.id]
-                          ? 'bg-emerald-500 text-white shadow-sm'
-                          : 'bg-blue-600 text-white hover:bg-blue-700'
-                      }`}
-                    >
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      <span>{completedLectures[currentLecture.id] ? 'เรียนจบแล้ว (Finished)' : 'Mark as Finished'}</span>
-                    </button>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white">{selectedCourse.title}</h2>
+                <p className="text-sm text-slate-500 dark:text-zinc-400 mt-2 leading-relaxed">{selectedCourse.description}</p>
+                
+                {activeVideo && (
+                  <div className="mt-6 pt-5 border-t border-slate-100 dark:border-zinc-800/60">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">กำลังเรียนอยู่ในหัวข้อ:</p>
+                    <h4 className="font-bold text-sm text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                      <Play className="w-3.5 h-3.5 fill-current" /> {activeVideo.title} ({activeVideo.duration})
+                    </h4>
                   </div>
                 )}
               </div>
-
-              <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-6 space-y-3 shadow-xs">
-                <h3 className="text-xs font-bold tracking-wider text-slate-400 uppercase">คำอธิบายรายละเอียดบทเรียนชุดโครงสร้างวิชา</h3>
-                <p className="text-sm text-slate-600 dark:text-zinc-300 font-normal leading-relaxed">
-                  {selectedCourse.description}
-                </p>
-                <div className="pt-2 flex items-center gap-4 text-xs text-slate-400 border-t border-slate-100 dark:border-zinc-800">
-                  <span>ผู้บรรยายหลัก: <strong className="text-slate-700 dark:text-zinc-200">{selectedCourse.instructor}</strong></span>
-                  <span>หมวดหมู่วิชาหลัก: <strong className="text-blue-500">{selectedCourse.category}</strong></span>
-                </div>
-              </div>
             </div>
 
-            <div className="space-y-6">
-              <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 shadow-sm space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">ความคืบหน้าภาพรวมคอร์สนี้</span>
-                  <span className="text-sm font-bold text-indigo-500">{getCourseProgress(selectedCourse)}% Finished</span>
-                </div>
-                <div className="w-full bg-slate-100 dark:bg-zinc-800 h-2 rounded-full overflow-hidden">
-                  <div 
-                    className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-300"
-                    style={{ width: `${getCourseProgress(selectedCourse)}%` }}
-                  />
-                </div>
-              </div>
+            <div className="space-y-4">
+              <h3 className="font-black text-sm uppercase text-slate-400 tracking-wider flex items-center gap-2">
+                <Video className="w-4 h-4" /> Course Curriculum ({selectedCourse.lectures.length})
+              </h3>
 
-              <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-sm overflow-hidden divide-y divide-slate-100 dark:divide-zinc-800/80">
-                <div className="p-4 bg-slate-50 dark:bg-zinc-900/50 flex justify-between items-center">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">Recorded Course Tapes ({selectedCourse.lectures?.length || 0})</h3>
-                </div>
-
-                {selectedCourse.lectures?.length > 0 ? (
-                  selectedCourse.lectures.map((lecture) => {
-                    const isExpanded = expandedLecture === lecture.id;
-                    const isActive = currentLecture?.id === lecture.id;
-                    const isDone = completedLectures[lecture.id];
-                    const isRecentWatched = lastWatchedTape[selectedCourse.id] === lecture.id;
-
+              <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+                {selectedCourse.lectures.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic py-4">ยังไม่มีข้อมูลเทปเรียนถูกอัปโหลดในคอร์สนี้</p>
+                ) : (
+                  selectedCourse.lectures.map((lecture, index) => {
+                    const isPlaying = activeVideo?.id === lecture.id;
                     return (
-                      <div key={lecture.id} className={`transition-colors ${isActive ? 'bg-blue-50/40 dark:bg-blue-950/10' : ''} ${isRecentWatched && !isActive ? 'border-l-2 border-dashed border-blue-500' : ''}`}>
-                        <div 
-                          onClick={() => {
-                            handleSelectLecture(lecture);
-                            setExpandedLecture(isExpanded ? null : lecture.id);
-                          }}
-                          className="p-4 flex items-center justify-between cursor-pointer group/item"
-                        >
-                          <div className="flex items-center gap-3 overflow-hidden pr-2">
-                            <button 
-                              onClick={(e) => toggleLectureCompletion(lecture.id, e, selectedCourse.id)}
-                              className={`shrink-0 rounded-full transition-colors ${isDone ? 'text-emerald-500' : 'text-slate-300 dark:text-zinc-700 hover:text-slate-400'}`}
-                            >
-                              <CheckCircle className="w-5 h-5 fill-current bg-white dark:bg-zinc-900" />
-                            </button>
-                            <div className="overflow-hidden">
-                              <p className={`text-sm font-bold truncate transition-colors ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-700 dark:text-zinc-300 group-hover/item:text-slate-900 dark:group-hover/item:text-white'}`}>
-                                {lecture.title}
-                              </p>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-[11px] text-slate-400 dark:text-zinc-500 font-mono">{lecture.duration}</span>
-                                {isRecentWatched && <span className="text-[9px] bg-blue-600 text-white font-extrabold px-1 py-0.05 rounded-sm uppercase scale-90">Last Watched</span>}
-                              </div>
+                      <div 
+                        key={lecture.id}
+                        className={`p-4 border rounded-xl transition-all ${
+                          isPlaying 
+                            ? 'bg-amber-50/50 dark:bg-amber-950/10 border-amber-300 dark:border-amber-800/50 shadow-sm' 
+                            : 'bg-white dark:bg-zinc-900/10 border-slate-100 dark:border-zinc-800/80 hover:border-slate-300 dark:hover:border-zinc-700'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <button 
+                            onClick={() => setActiveVideo(lecture)}
+                            className="flex-1 text-left group"
+                          >
+                            <div className="flex items-center gap-2 text-[11px] font-bold text-slate-400 dark:text-zinc-500 mb-1">
+                              <span>0{index + 1}</span>
+                              <span className="flex items-center gap-1"><Clock className="w-3 h-3"/> {lecture.duration}</span>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {isAdminUser && isAdminModeActive && (
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); handleDeleteTape(lecture.id); }}
-                                className="p-1 text-slate-400 hover:text-red-500 rounded transition-colors"
-                                title="ลบเทปเรียนนี้ออก"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                            {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
-                          </div>
+                            <h4 className={`text-xs font-bold transition-colors ${isPlaying ? 'text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-zinc-200 group-hover:text-amber-500'}`}>
+                              {lecture.title}
+                            </h4>
+                          </button>
+
+                          {isAdmin && (
+                            <button 
+                              onClick={() => handleDeleteLecture(selectedCourse.id, lecture.id)}
+                              className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                              title="ลบเทปเรียนนี้ออก"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
 
-                        {isExpanded && (
-                          <div className="px-4 pb-4 pt-1 border-t border-dashed border-slate-100 dark:border-zinc-800/40 space-y-2 bg-slate-50/50 dark:bg-zinc-950/20">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-zinc-500 flex items-center gap-1">
-                              <FileText className="w-3 h-3 text-indigo-400" /> Attached Course Materials
-                            </p>
-                            <div className="space-y-1.5">
-                              {lecture.materials && lecture.materials.length > 0 ? (
-                                lecture.materials.map((file, idx) => (
-                                  <div key={idx} className="flex items-center justify-between p-2 bg-white dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60 rounded-xl text-xs">
-                                    <span className="font-medium text-slate-600 dark:text-zinc-400 truncate max-w-[170px]" title={file.name}>{file.name}</span>
-                                    <a 
-                                      href={file.data || "#"} 
-                                      download={file.name}
-                                      onClick={(e) => {
-                                        if (!file.data) {
-                                          e.preventDefault();
-                                          alert(`ดาวน์โหลดชีทสรุปบทเรียนสำเร็จ: ${file.name} (ไฟล์ตัวอย่างเริ่มต้น)`);
-                                        }
-                                      }}
-                                      className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 text-blue-500 dark:text-blue-400 transition-colors" 
-                                      title="Download Sheet"
-                                    >
-                                      <Download className="w-3.5 h-3.5" />
-                                    </a>
-                                  </div>
-                                ))
-                              ) : (
-                                <p className="text-[11px] text-slate-400 italic pl-1">คอร์สเทปเรียนนี้ไม่มีชีทแจกดาวน์โหลดเพิ่มเติม</p>
-                              )}
-                            </div>
+                        {lecture.materials && lecture.materials.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-slate-100 dark:border-zinc-800/40 space-y-1.5">
+                            {lecture.materials.map((mat, mIdx) => (
+                              <a
+                                key={mIdx}
+                                href={mat.data}
+                                className="flex items-center justify-between text-[11px] p-2 rounded-lg bg-slate-50 dark:bg-zinc-950 border text-slate-600 dark:text-zinc-400 hover:bg-amber-500 hover:text-slate-950 dark:hover:bg-amber-500 dark:hover:text-slate-950 transition-colors font-medium"
+                              >
+                                <span className="flex items-center gap-1.5 truncate pr-2">
+                                  <FileText className="w-3.5 h-3.5 shrink-0" />
+                                  <span className="truncate">{mat.name}</span>
+                                </span>
+                                <Download className="w-3 h-3 shrink-0" />
+                              </a>
+                            ))}
                           </div>
                         )}
                       </div>
                     );
                   })
-                ) : (
-                  <div className="p-6 text-center text-xs text-slate-400 italic">
-                    ยังไม่มีเทปถูกบันทึกส่งข้อมูลลงโครงสร้างระบบวิชานี้ขณะนี้
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        
+        // ================================================
+        // หน้าแสดงรายการคอร์สทั้งหมด (Grid Layout)
+        // ================================================
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredCourses.length === 0 ? (
+            <div className="col-span-full text-center py-12 border-2 border-dashed rounded-2xl dark:border-zinc-800">
+              <BookOpen className="w-10 h-10 mx-auto text-slate-300 dark:text-zinc-700" />
+              <p className="mt-2 text-sm text-slate-500 dark:text-zinc-500 font-medium">ไม่พบรายการคอร์สเรียนที่คุณกำลังค้นหา</p>
+            </div>
+          ) : (
+            filteredCourses.map(course => (
+              <div 
+                key={course.id}
+                className={`group flex flex-col bg-white dark:bg-zinc-900/10 border rounded-2xl overflow-hidden transition-all duration-300 hover:shadow-md hover:border-slate-300 dark:hover:border-zinc-700 relative ${
+                  course.isHidden ? 'opacity-65 border-dashed border-red-300 dark:border-red-900/40' : 'border-slate-100 dark:border-zinc-800/80'
+                }`}
+              >
+                {isAdmin && (
+                  <div className="absolute top-3 right-3 z-10 flex gap-1.5 bg-black/50 backdrop-blur-md p-1.5 rounded-xl">
+                    <button
+                      onClick={() => toggleCourseVisibility(course.id, course.isHidden)}
+                      className={`p-1 rounded-md transition-colors ${course.isHidden ? 'text-red-400' : 'text-emerald-400'}`}
+                      title={course.isHidden ? "คลิกเพื่อเปิดเผยคอร์ส" : "คลิกเพื่อซ่อนคอร์สนี้จากบุคคลทั่วไป"}
+                    >
+                      {course.isHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                    <span className="text-[10px] text-white font-bold px-1 self-center">ADMIN</span>
                   </div>
+                )}
+
+                <div className="aspect-video relative overflow-hidden bg-slate-100 dark:bg-zinc-900">
+                  <img 
+                    src={course.imageUrl} 
+                    alt={course.title}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
+                  <span className="absolute bottom-3 left-3 px-2 py-0.5 rounded-md bg-white/95 dark:bg-zinc-900/95 text-slate-900 dark:text-white font-bold text-[9px] tracking-wide uppercase shadow-sm border border-slate-100 dark:border-zinc-800">
+                    {course.category}
+                  </span>
+                </div>
+
+                <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <h3 className="font-bold text-base text-slate-900 dark:text-white leading-snug group-hover:text-amber-500 transition-colors">
+                      {course.title}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-zinc-400 line-clamp-2 leading-relaxed">
+                      {course.description}
+                    </p>
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-50 dark:border-zinc-800/50 flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-bold flex items-center gap-1">
+                      <Clock className="w-3 h-3"/> {course.lectures.length} Tapes Added
+                    </span>
+                    <button
+                      onClick={() => setSelectedCourse(course)}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-slate-900 hover:bg-amber-500 text-white hover:text-slate-950 font-bold text-xs rounded-xl transition-all duration-200"
+                    >
+                      Enter Laboratory <ChevronRight className="w-3 h-3 stroke-[3]" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* ================================================ */}
+      {/* ส่วนควบคุมของผู้ดูแลระบบ (Admin Control Workspace) */}
+      {/* ================================================ */}
+      {isAdmin && (
+        <div className="mt-12 p-6 border-2 border-dashed border-amber-500/20 rounded-3xl bg-amber-50/10 dark:bg-amber-950/5 space-y-8">
+          
+          <div className="flex items-center gap-2 border-b pb-4 border-amber-500/10">
+            <div className="p-2 bg-amber-500/10 rounded-xl text-amber-500">
+              <Shield className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-wider">แผงควบคุมระบบการศึกษา (Real-time Creator Studio)</h2>
+              <p className="text-xs text-slate-400 mt-0.5">การบันทึกข้อมูลจะถูกซิงค์เพื่อกระจายสัญญาณภาพไปยังหน้าจอ iPad และเบราว์เซอร์อื่นทันทีโดยไม่ต้อง Deploy ใหม่</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            
+            {/* ฟอร์ม 1: เพิ่มเทปเรียนใหม่ลงในคอร์สที่มีอยู่แล้ว */}
+            <form onSubmit={handleAddTapeSubmit} className="space-y-4">
+              <h3 className="font-black text-xs uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
+                <FolderPlus className="w-4 h-4 text-amber-500" /> 1. เพิ่มเทปการสอน/อัปเดตไฟล์ชีท
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1">เลือกคอร์สเรียนปลายทาง *</label>
+                  <select
+                    value={selectedCourseId}
+                    onChange={(e) => setSelectedCourseId(e.target.value)}
+                    className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="">-- เลือกคอร์ส --</option>
+                    {courses.map(c => (
+                      <option key={c.id} value={c.id}>{c.title}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1">ความยาวคลิป (เช่น 1h 45m)</label>
+                  <input
+                    type="text" placeholder="1h 45m" value={tapeDuration} onChange={(e) => setTapeDuration(e.target.value)}
+                    className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1">ชื่อตอน / หัวข้อเทปเรียน *</label>
+                <input
+                  type="text" placeholder="เช่น Tape 3: Advanced Segment Tree Overlap Query" value={tapeTitle} onChange={(e) => setTapeTitle(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-1"><Link2 className="w-3 h-3"/> YouTube Video ID *</label>
+                <input
+                  type="text" placeholder="รหัส 11 หลัก เช่น dQw4w9WgXcQ" value={tapeVideoId} onChange={(e) => setTapeVideoId(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-1"><Upload className="w-2.5 h-2.5"/> เลือกเอกสารประกอบการเรียน (PDF/Handout)</label>
+                <input 
+                  type="file" multiple onChange={handleMaterialsUpload}
+                  className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200 cursor-pointer"
+                />
+                {uploadedMaterials.length > 0 && (
+                  <p className="text-[10px] text-emerald-600 mt-1 font-semibold">พบความจำนงส่งต่อ {uploadedMaterials.length} ไฟล์ เข้าคลาวด์</p>
                 )}
               </div>
 
-              {isAdminUser && isAdminModeActive && (
-                <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-5 space-y-4">
-                  <div className="flex items-center gap-2 pb-2 border-b border-amber-500/10">
-                    <Video className="w-4 h-4 text-amber-500" />
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Backoffice: Add Course Tape Record</h4>
-                  </div>
-                  <form onSubmit={handleAddTape} className="space-y-3">
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1">หัวข้อบทเรียนประยุกต์สอน (Tape Title)</label>
-                      <input 
-                        type="text" required value={newTape.title} onChange={e => setNewTape({...newTape, title: e.target.value})}
-                        placeholder="เช่น มหากาพย์ตัวแปรสภาวะ Dynamic Graph Layout"
-                        className="w-full px-3 py-1.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="col-span-2">
-                        <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-0.5"><Link2 className="w-2.5 h-2.5" /> YouTube URL / ID</label>
-                        <input 
-                          type="text" required value={newTape.videoUrl} onChange={e => setNewTape({...newTape, videoUrl: e.target.value})}
-                          placeholder="วางลิงก์ยูทูป เช่น https://youtu.be/..."
-                          className="w-full px-3 py-1.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-amber-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1">เวลาเรียน (Time)</label>
-                        <input 
-                          type="text" required value={newTape.duration} onChange={e => setNewTape({...newTape, duration: e.target.value})}
-                          placeholder="เช่น 2h 15m"
-                          className="w-full px-3 py-1.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-amber-500"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-1"><Upload className="w-2.5 h-2.5"/> อัปโหลดชีท/เอกสารประกอบเทปเรียน</label>
-                      <input 
-                        type="file" multiple
-                        onChange={handleMaterialsUpload}
-                        className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200 cursor-pointer"
-                      />
-                      {uploadedMaterials.length > 0 && (
-                        <p className="text-[10px] text-emerald-600 mt-1 font-semibold">เลือกแล้ว {uploadedMaterials.length} ไฟล์ พร้อมอัปโหลด</p>
-                      )}
-                    </div>
-                    <button
-                      type="submit"
-                      className="w-full flex items-center justify-center gap-1 px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs hover:bg-amber-400 transition-colors shadow-sm"
-                    >
-                      <Plus className="w-3.5 h-3.5 stroke-[3]" /> Add Tape & Upload Resources
-                    </button>
-                  </form>
+              <button
+                type="submit"
+                disabled={actionLoading}
+                className="w-full flex items-center justify-center gap-1 px-4 py-2 bg-amber-500 disabled:bg-slate-300 disabled:cursor-not-allowed text-slate-950 font-bold rounded-xl text-xs hover:bg-amber-400 transition-colors shadow-sm"
+              >
+                {actionLoading ? "กำลังบันทึกข้อมูล..." : <><Plus className="w-3.5 h-3.5 stroke-[3]" /> Add Tape & Upload Resources</>}
+              </button>
+            </form>
+
+            {/* ฟอร์ม 2: สร้างคอร์สเรียนขึ้นมาใหม่ตั้งต้น */}
+            <form onSubmit={handleCreateCourseSubmit} className="space-y-4 border-t lg:border-t-0 lg:border-l pt-6 lg:pt-0 lg:pl-8 border-slate-200 dark:border-zinc-800">
+              <h3 className="font-black text-xs uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
+                <BookOpen className="w-4 h-4 text-blue-500" /> 2. จัดเตรียมเปิดคอร์สใหม่ (Create New Course Grid)
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1">ไอดีคอร์ส (ภาษาอังกฤษ-ตัวเล็ก-ขีดกลาง) *</label>
+                  <input
+                    type="text" placeholder="เช่น toi-geometry" value={newCourseId} onChange={(e) => setNewCourseId(e.target.value)}
+                    className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-amber-500"
+                  />
                 </div>
-              )}
-            </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1">หมวดหมู่ / Category</label>
+                  <input
+                    type="text" placeholder="Informatics / Physics" value={newCourseCategory} onChange={(e) => setNewCourseCategory(e.target.value)}
+                    className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1">ชื่อคอร์สเรียนเต็มรูป *</label>
+                <input
+                  type="text" placeholder="เช่น POSN Informatics: Computational Geometry Mastery" value={newCourseTitle} onChange={(e) => setNewCourseTitle(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1">คำอธิบายย่อ (Short Description)</label>
+                <textarea
+                  placeholder="รายละเอียดคร่าวๆ ของคอร์สสำหรับแสดงหน้ารวม..." value={newCourseDesc} onChange={(e) => setNewCourseDesc(e.target.value)} rows="1"
+                  className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-amber-500"
+                ></textarea>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* 📂 ปรับปรุงใหม่: เปลี่ยนอินพุต URL สตริงข้อความ เป็นกล่องอัปโหลดรูปภาพโดยตรงจากเครื่องคอมพิวเตอร์ */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-1">
+                    <ImageIcon className="w-3 h-3 text-amber-500" /> เลือกไฟล์ภาพปกคอร์สจากเครื่อง
+                  </label>
+                  <input
+                    id="cover-upload-input"
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setCourseCoverFile(e.target.files[0])}
+                    className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 dark:file:bg-zinc-900 file:text-blue-700 dark:file:text-blue-400 hover:file:bg-blue-100 cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1">ชื่อผู้สอน (Instructor)</label>
+                  <input
+                    type="text" placeholder="Ajarn ATier" value={newCourseInstructor} onChange={(e) => setNewCourseInstructor(e.target.value)}
+                    className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={actionLoading}
+                className="w-full flex items-center justify-center gap-1 px-4 py-2 bg-blue-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded-xl text-xs transition-colors shadow-sm"
+              >
+                {actionLoading ? "กำลังอัปโหลดรูปภาพและบันทึกข้อมูลคอร์ส..." : <><FolderPlus className="w-3.5 h-3.5" /> Initialize New Course Template</>}
+              </button>
+            </form>
+
           </div>
         </div>
       )}
