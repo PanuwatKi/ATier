@@ -23,21 +23,19 @@ const INITIAL_COURSES = [
 ];
 
 export default function Courses() {
-  // --- SUPABASE ROLE & AUTHORIZATION CENTRAL SYSTEM (SECURE MODE) ---
+  // --- SUPABASE ROLE & AUTHORIZATION CENTRAL SYSTEM ---
   const { user, role } = useAuth(); 
   const [isAdminModeActive, setIsAdminModeActive] = useState(false); 
 
-  // ตรวจสอบระดับสิทธิ์จากค่าที่มาจากตาราง Profiles ใน Database เท่านั้น
+  // เช็คระดับสิทธิ์จาก Database และ Enum ของ Supabase (สอดคล้องกับภาพที่ 3 ตัวพิมพ์เล็ก/ใหญ่ต้องตรงกัน)
+  // หมายเหตุ: ในภาพที่ 3 ค่าที่บันทึกคือ 'Admin' และ 'Super Admin' (ตัวแรกเป็นพิมพ์ใหญ่) 
   const isAdminUser = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin';
 
   useEffect(() => {
-    // ใช้ useEffect เพื่อเฝ้าดูคอยตรวจจับ (Listen) เมื่อไหร่ก็ตามที่สิทธิ์จาก Supabase โหลดเสร็จ
-    if (isAdminUser) {
-      setIsAdminModeActive(true); // เปิดแผงควบคุมอัตโนมัติทันทีเมื่อได้รับสิทธิ์จาก DB
-    } else {
+    if (!isAdminUser) {
       setIsAdminModeActive(false);
     }
-  }, [role, isAdminUser]); // คอยทำงานซ้ำทุกครั้งที่สเตท role เปลี่ยนแปลง
+  }, [role, isAdminUser]);
 
   // --- LOCAL STORAGE CORE SYNCHRONIZATION ---
   const [courses, setCourses] = useState(() => {
