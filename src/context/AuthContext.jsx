@@ -69,7 +69,7 @@ export function AuthProvider({ children }) {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: 'https://atier-web.vercel.app/', // ตรวจสอบให้ตรงกับ URL เว็บของคุณ
+        redirectTo: window.location.origin, // ตรวจสอบให้ตรงกับ URL เว็บของคุณ
       },
     });
     if (error) console.error("Error logging in with Google:", error.message);
