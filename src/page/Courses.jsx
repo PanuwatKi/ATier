@@ -22,8 +22,8 @@ export default function Courses() {
   const [selectedCourseId, setSelectedCourseId] = useState('');
   const [tapeTitle, setTapeTitle] = useState('');
   const [tapeDuration, setTapeDuration] = useState('');
-  const [tapeVideoId, setTapeVideoId] = useState('');
-  const [uploadedMaterials, setUploadedMaterials] = useState([]); // เก็บไฟล์ชีทจริงจากเครื่อง
+  const [tapeVideoId, setTapeVideoId] = useState(''); // รองรับทั้ง Link เต็ม และ ID ตรงๆ
+  const [uploadedMaterials, setUploadedMaterials] = useState([]); 
 
   // --- States สำหรับสร้างคอร์สใหม่ + ไฟล์รูปภาพหน้าปก ---
   const [newCourseId, setNewCourseId] = useState('');
@@ -33,6 +33,18 @@ export default function Courses() {
   const [newCourseInstructor, setNewCourseInstructor] = useState('Ajarn ATier');
   const [courseCoverFile, setCourseCoverFile] = useState(null); 
   const [actionLoading, setActionLoading] = useState(false);   
+
+  // ==========================================
+  // ฟังก์ชันช่วยแกะรหัส Video ID จาก YouTube URL ทุกรูปแบบ
+  // ==========================================
+  const extractYoutubeId = (urlOrId) => {
+    if (!urlOrId) return '';
+    const trimmed = urlOrId.trim();
+    // Regex รองรับ watch?v=, youtu.be/, embed/, v/, หรือใส่ ID มาตรงๆ 11 หลัก
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = trimmed.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : trimmed;
+  };
 
   // ==========================================
   // 1. ฟังก์ชันดึงข้อมูลจาก Supabase (Fetch Data)
@@ -59,7 +71,7 @@ export default function Courses() {
       
       setCourses(formattedData);
 
-      // ซิงค์ข้อมูลหน้าเจาะลึกที่เปิดค้างไว้ให้เป็นปัจจุบันด้วย
+      // ซิงค์หน้าเจาะลึกที่เปิดค้างไว้ให้เป็นปัจจุบันด้วย
       if (selectedCourse) {
         const updatedCurrent = formattedData.find(c => c.id === selectedCourse.id);
         if (updatedCurrent) setSelectedCourse(updatedCurrent);
@@ -97,30 +109,38 @@ export default function Courses() {
   // 3. ฟังก์ชันสำหรับแอดมิน (Admin Functions)
   // ==========================================
   
-  // เก็บไฟล์ชีทเรียนเข้าสเตทเตรียมอัปโหลด
   const handleMaterialsUpload = (e) => {
     const files = Array.from(e.target.files);
     setUploadedMaterials(files);
   };
 
-  // 3.1 [ปรับปรุงใหม่ ⚡] เพิ่มเทปเรียนใหม่ + อัปโหลดไฟล์เอกสารเข้า Storage จริง
+  // 3.1 [แก้ไขใหม่ 🔥] เพิ่มเทปเรียน เสถียรขึ้น อัปโหลดพร้อมกัน และประมวลผลทันทีไม่หน่วงหน้าจอ
   const handleAddTapeSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedCourseId || !tapeTitle || !tapeVideoId) {
-      alert("กรุณากรอกข้อมูลเทปเรียนให้ครบถ้วน");
+    
+    // แกะสกัดเอา YouTube ID ออกมาจากสิ่งที่แอดมินกรอกมาทันที
+    const finalVideoId = extractYoutubeId(tapeVideoId);
+
+    if (!selectedCourseId || !tapeTitle || !finalVideoId) {
+      alert("กรุณากรอกข้อมูลสำคัญ (เลือกคอร์ส, ชื่อตอน, และลิงก์ YouTube) ให้ครบถ้วน");
+      return;
+    }
+
+    if (finalVideoId.length !== 11) {
+      alert("⚠️ รูปแบบลิงก์หรือรหัส YouTube ไม่ถูกต้อง กรุณาตรวจสอบอีกครั้งครับ");
       return;
     }
 
     setActionLoading(true);
     try {
       const targetCourse = courses.find(c => c.id === selectedCourseId);
-      if (!targetCourse) return;
+      if (!targetCourse) throw new Error("ไม่พบข้อมูลคอร์สเรียนปลายทาง");
 
-      const uploadedMaterialsData = [];
+      let uploadedMaterialsData = [];
 
-      // วนลูปอัปโหลดไฟล์ชีทเรียนทีละไฟล์เข้าคลัง Storage จริงๆ
+      // ปรับปรุง: อัปโหลดไฟล์งานแบบขนาน (Parallel Upload) มั่นใจได้เรื่องความเร็วและความเสถียร
       if (uploadedMaterials.length > 0) {
-        for (const file of uploadedMaterials) {
+        const uploadPromises = uploadedMaterials.map(async (file) => {
           const fileExt = file.name.split('.').pop();
           const fileName = `${selectedCourseId}-${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileExt}`;
           const filePath = `materials/${fileName}`;
@@ -129,29 +149,33 @@ export default function Courses() {
             .from('course-assets')
             .upload(filePath, file);
 
-          if (uploadError) throw new Error(`ล้มเหลวขณะอัปโหลดไฟล์งาน: ${uploadError.message}`);
+          if (uploadError) throw new Error(`ไม่สามารถอัปโหลดไฟล์ ${file.name} ได้: ${uploadError.message}`);
 
           const { data: urlData } = supabase.storage
             .from('course-assets')
             .getPublicUrl(filePath);
 
-          uploadedMaterialsData.push({
+          return {
             name: file.name,
             data: urlData.publicUrl
-          });
-        }
+          };
+        });
+
+        // สั่งยิงไฟล์ขึ้น Storage พร้อมๆ กันทีเดียว
+        uploadedMaterialsData = await Promise.all(uploadPromises);
       }
 
       const newLecture = {
         id: `l_${Date.now()}`,
         title: tapeTitle,
         duration: tapeDuration || "1h 30m",
-        videoId: tapeVideoId,
+        videoId: finalVideoId,
         materials: uploadedMaterialsData
       };
 
       const updatedLectures = [...targetCourse.lectures, newLecture];
 
+      // อัปเดตข้อมูลขึ้น Database
       const { error } = await supabase
         .from('courses')
         .update({ lectures: updatedLectures })
@@ -159,7 +183,20 @@ export default function Courses() {
 
       if (error) throw error;
 
-      // ล้างฟอร์ม
+      // เพิ่มประสิทธิภาพ (Optimistic UI Update): อัปเดตสเตทในเครื่องทันทีโดยไม่ต้องรอดึงใหม่จากเซิร์ฟเวอร์
+      const updatedCoursesList = courses.map(c => {
+        if (c.id === selectedCourseId) {
+          return { ...c, lectures: updatedLectures };
+        }
+        return c;
+      });
+      setCourses(updatedCoursesList);
+
+      if (selectedCourse && selectedCourse.id === selectedCourseId) {
+        setSelectedCourse(prev => ({ ...prev, lectures: updatedLectures }));
+      }
+
+      // ล้างค่าฟอร์มพร้อมใช้งานต่อทันที
       setTapeTitle('');
       setTapeDuration('');
       setTapeVideoId('');
@@ -167,34 +204,37 @@ export default function Courses() {
       const fileInput = document.getElementById('materials-upload-input');
       if (fileInput) fileInput.value = '';
 
-      // อัปเดต UI ทันทีไม่ต้องรอลุ้นสัญญาณเน็ตเวิร์กหมุนวนกลับมา
-      await fetchCourses();
-      alert("🎉 เพิ่มเทปเรียนและอัปโหลดไฟล์งานเข้าสู่ระบบคลาวด์สำเร็จ!");
+      setActionLoading(false); // ปิดการหมุนค้างทันทีหลังจากอัปเดตสเตทเสร็จสปีดเร็วกว่าเดิม
+      alert("🎉 เพิ่มเทปเรียนและเอกสารประกอบเข้าสู่ระบบเรียบร้อยแล้ว!");
+
+      // รันดึงข้อมูลซ้ำเบื้องหลังเพื่อตรวจสอบความถูกต้องสมบูรณ์อีกชั้น
+      fetchCourses();
     } catch (err) {
       alert(`ล้มเหลว: ${err.message}`);
-    } finally {
       setActionLoading(false);
     }
   };
 
-  // 3.2 [ปรับปรุงใหม่ ⚡] สลับการซ่อน/แสดงคอร์สเรียน (แก้บั๊กไอคอนรูปตาไม่ยอมเปลี่ยนสถานะ)
+  // 3.2 สลับการซ่อน/แสดงคอร์สเรียน (Instant Update)
   const toggleCourseVisibility = async (courseId, currentStatus) => {
     try {
+      // อัปเดตสเตทหน้าจอก่อนทันที (Optimistic) เพื่อให้ไอคอนตาเปลี่ยนไวแบบไร้ดีเลย์
+      setCourses(prev => prev.map(c => c.id === courseId ? { ...c, isHidden: !currentStatus } : c));
+      
       const { error } = await supabase
         .from('courses')
         .update({ is_hidden: !currentStatus })
         .eq('id', courseId);
 
       if (error) throw error;
-      
-      // ดึงข้อมูลใหม่มาทับสเตททันที ไอคอนตาจะเปลี่ยนสถานะทันทีแบบติดสปีด
-      await fetchCourses();
+      fetchCourses();
     } catch (err) {
       alert("ล้มเหลว: " + err.message);
+      fetchCourses(); // ดึงค่าเดิมกลับมาหาก Error
     }
   };
 
-  // 3.3 [ปรับปรุงใหม่ ⚡] ฟังก์ชันลบเทปเรียนออกจากคอร์ส
+  // 3.3 ฟังก์ชันลบเทปเรียนออกจากคอร์ส
   const handleDeleteLecture = async (courseId, lectureId) => {
     if (!window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบเทปเรียนนี้?")) return;
 
@@ -204,16 +244,22 @@ export default function Courses() {
 
       const filteredLectures = targetCourse.lectures.filter(l => l.id !== lectureId);
 
+      // ปรับให้รีเฟรช State ทันที
+      setCourses(prev => prev.map(c => c.id === courseId ? { ...c, lectures: filteredLectures } : c));
+      if (selectedCourse && selectedCourse.id === courseId) {
+        setSelectedCourse(prev => ({ ...prev, lectures: filteredLectures }));
+      }
+
       const { error } = await supabase
         .from('courses')
         .update({ lectures: filteredLectures })
         .eq('id', courseId);
 
       if (error) throw error;
-      
-      await fetchCourses();
+      fetchCourses();
     } catch (err) {
       alert("ไม่สามารถลบได้: " + err.message);
+      fetchCourses();
     }
   };
 
@@ -536,7 +582,7 @@ export default function Courses() {
             </div>
             <div>
               <h2 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-wider">แผงควบคุมระบบการศึกษา (Real-time Creator Studio)</h2>
-              <p className="text-xs text-slate-400 mt-0.5">การบันทึกข้อมูลถูกตั้งค่าให้อัปเดตเข้า State ทันที และกระจายสัญญาณแบบ Real-time ไปยังเบราว์เซอร์อื่นคู่ขนานกัน</p>
+              <p className="text-xs text-slate-400 mt-0.5">ระบบแกะลิงก์ YouTube อัตโนมัติและสปีดการอัปโหลดความเร็วสูงระดับ Cloud Optimization</p>
             </div>
           </div>
 
@@ -580,10 +626,15 @@ export default function Courses() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-1"><Link2 className="w-3 h-3"/> YouTube Video ID *</label>
+                <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-1">
+                  <Link2 className="w-3 h-3 text-amber-500"/> วางลิงก์ YouTube หรือ Video ID *
+                </label>
                 <input
-                  type="text" placeholder="รหัส 11 หลัก เช่น dQw4w9WgXcQ" value={tapeVideoId} onChange={(e) => setTapeVideoId(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-amber-500"
+                  type="text" 
+                  placeholder="วางลิงก์เต็มได้เลย เช่น https://www.youtube.com/watch?v=..." 
+                  value={tapeVideoId} 
+                  onChange={(e) => setTapeVideoId(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-amber-500 text-slate-800 dark:text-zinc-100"
                 />
               </div>
 
@@ -595,7 +646,7 @@ export default function Courses() {
                   className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200 cursor-pointer"
                 />
                 {uploadedMaterials.length > 0 && (
-                  <p className="text-[10px] text-emerald-600 mt-1 font-semibold">📬 เลือกชีทเตรียมอัปโหลดแล้ว {uploadedMaterials.length} ไฟล์</p>
+                  <p className="text-[10px] text-emerald-600 mt-1 font-semibold">📬 เลือกไฟล์ชีทงานพร้อมอัปโหลดจำนวน {uploadedMaterials.length} ไฟล์</p>
                 )}
               </div>
 
@@ -604,7 +655,7 @@ export default function Courses() {
                 disabled={actionLoading}
                 className="w-full flex items-center justify-center gap-1 px-4 py-2 bg-amber-500 disabled:bg-slate-300 disabled:cursor-not-allowed text-slate-950 font-bold rounded-xl text-xs hover:bg-amber-400 transition-colors shadow-sm"
               >
-                {actionLoading ? "กำลังอัปโหลดไฟล์เอกสารเข้า Storage..." : <><Plus className="w-3.5 h-3.5 stroke-[3]" /> Add Tape & Upload Resources</>}
+                {actionLoading ? "🚀 กำลังส่งข้อมูลขึ้นระบบคลาวด์แบบเร่งสปีด..." : <><Plus className="w-3.5 h-3.5 stroke-[3]" /> Add Tape & Upload Resources</>}
               </button>
             </form>
 
