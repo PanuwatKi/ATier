@@ -104,7 +104,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={value}>
       {loading ? (
         <div className="flex min-h-screen items-center justify-center bg-white dark:bg-gray-900 text-gray-500">
-          <p className="animate-pulse font-medium">Loading...</p>
+          <p className="animate-pulse font-medium">Loading... ถ้าหากนานเกินไปให้ไปที่ atier-rouge.vercel.app แทนนะครับ</p>
         </div>
       ) : (
         children

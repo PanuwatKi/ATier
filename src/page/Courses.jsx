@@ -367,7 +367,7 @@ export default function Courses() {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 flex flex-col justify-center items-center">
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
-        <p className="mt-3 text-xs font-bold text-slate-400">กำลังเชื่อมโยงคลังข้อมูลหลังบ้าน Supabase...</p>
+        <p className="mt-3 text-xs font-bold text-slate-400">กำลังเชื่อมโยงคลังข้อมูลหลังบ้าน Supabase... หากนานเกินไปแนะนำให้ไปที่ atier-rouge.vercel.app แล้วลองอีกครั้ง...</p>
       </div>
     );
   }
@@ -393,7 +393,7 @@ export default function Courses() {
             }`}
           >
             <Shield className="w-3.5 h-3.5" />
-            <span>{isAdminModeActive ? 'BACKOFFICE CONTROL ACTIVE' : 'STUDENT MODE VIEW'}</span>
+            <span>{isAdminModeActive ? 'Admin CONTROL ACTIVE' : 'STUDENT MODE VIEW'}</span>
           </button>
         )}
       </div>
@@ -421,7 +421,7 @@ export default function Courses() {
                     />
                   </div>
                   <textarea 
-                    required placeholder="คำอธิบายรายละเอียดวิชาเชิงลึกด้านล่างคอร์สเรียน..." rows="3"
+                    required placeholder="คำอธิบายรายละเอียดบทเรียน..." rows="3"
                     value={newCourse.description} onChange={e => setNewCourse({...newCourse, description: e.target.value})}
                     className="w-full px-4 py-2.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-amber-500"
                   />
@@ -518,7 +518,7 @@ export default function Courses() {
                       <span className="text-slate-400 dark:text-zinc-500 flex items-center gap-1">
                         <BookOpen className="w-3.5 h-3.5" /> {course.lectures?.length || 0} Lectures
                       </span>
-                      <span className="font-bold text-blue-600 dark:text-blue-400">{progressPercent}% เรียนเสร็จสิ้น</span>
+                      <span className="font-bold text-blue-600 dark:text-blue-400">{progressPercent}% Finished</span>
                     </div>
                     <div className="w-full bg-slate-200 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
                       <div 
@@ -538,7 +538,7 @@ export default function Courses() {
             onClick={() => setSelectedCourse(null)}
             className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white mb-6 bg-white dark:bg-zinc-900 px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm transition-all"
           >
-            <ArrowLeft className="w-3.5 h-3.5" /> แผงควบคุมหน้าหลัก (Dashboard)
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
           </button>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
@@ -598,7 +598,7 @@ export default function Courses() {
               </div>
 
               <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-6 space-y-3 shadow-xs">
-                <h3 className="text-xs font-bold tracking-wider text-slate-400 uppercase">คำอธิบายรายละเอียดบทเรียนชุดโครงสร้างวิชา</h3>
+                <h3 className="text-xs font-bold tracking-wider text-slate-400 uppercase">คำอธิบายรายละเอียดบทเรียน (Lesson Description)</h3>
                 <p className="text-sm text-slate-600 dark:text-zinc-300 font-normal leading-relaxed">
                   {selectedCourse.description}
                 </p>
@@ -612,7 +612,7 @@ export default function Courses() {
             <div className="space-y-6">
               <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 shadow-sm space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">ความคืบหน้าภาพรวมคอร์สนี้</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">Overall course progress</span>
                   <span className="text-sm font-bold text-indigo-500">{getCourseProgress(selectedCourse)}% Finished</span>
                 </div>
                 <div className="w-full bg-slate-100 dark:bg-zinc-800 h-2 rounded-full overflow-hidden">
@@ -717,11 +717,11 @@ export default function Courses() {
                 <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-5 space-y-4">
                   <div className="flex items-center gap-2 pb-2 border-b border-amber-500/10">
                     <Video className="w-4 h-4 text-amber-500" />
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Backoffice: Add Course Tape Record</h4>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Admin Control: Add Course Tape Record</h4>
                   </div>
                   <form onSubmit={handleAddTape} className="space-y-3">
                     <div>
-                      <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1">หัวข้อบทเรียนประยุกต์สอน (Tape Title)</label>
+                      <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1">หัวข้อบทเรียน (Title)</label>
                       <input 
                         type="text" required value={newTape.title} onChange={e => setNewTape({...newTape, title: e.target.value})}
                         placeholder="เช่น มหากาพย์ตัวแปรสภาวะ Dynamic Graph Layout"
@@ -747,7 +747,7 @@ export default function Courses() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-1"><Upload className="w-2.5 h-2.5"/> อัปโหลดชีท/เอกสารประกอบเทปเรียน</label>
+                      <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-1"><Upload className="w-2.5 h-2.5"/> Upload teaching materials</label>
                       <input 
                         type="file" multiple
                         onChange={handleMaterialsUpload}
