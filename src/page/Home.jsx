@@ -44,7 +44,7 @@ export default function Home() {
     phone: true, ig: true, line: true, email: true,
   });
 
-  /*useEffect(() => {
+  useEffect(() => {
     // ดักฟังค่าสิทธิ์ที่เปลี่ยนมาจาก Supabase ใน Database เท่านั้น
     const hasAdminRole = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin';
 
@@ -55,8 +55,8 @@ export default function Home() {
       setIsAdminUser(false);
       setIsAdmin(false);
     }
-  }, [role]); // ทำงานซ้ำทุกครั้งเมื่อบทบาทในฐานข้อมูลเปลี่ยนไป*/
-  useEffect(() => {
+  }, [role]); // ทำงานซ้ำทุกครั้งเมื่อบทบาทในฐานข้อมูลเปลี่ยนไป
+  /*useEffect(() => {
     console.log("========================================");
     console.log("✨ ATier Auth Status Monitor ✨");
     console.log("1. ข้อมูลยูสเซอร์ล็อกอิน (User Object):", user);
@@ -64,7 +64,7 @@ export default function Home() {
     console.log("3. สิทธิ์ที่ส่งมาถึงหน้าบ้าน (Role จาก useAuth):", role);
     console.log("4. สถานะการผ่านสิทธิ์แอดมิน (isAdminUser):", isAdminUser);
     console.log("========================================");
-  }, [user, role, isAdminUser]);
+  }, [user, role, isAdminUser]);*/
 
   const openModal = (member) => setSelectedMember(member);
   const closeModal = () => setSelectedMember(null);

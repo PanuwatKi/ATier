@@ -597,7 +597,7 @@ export default function Courses() {
                       <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1">หัวข้อบทเรียนประยุกต์สอน (Tape Title)</label>
                       <input 
                         type="text" required value={newTape.title} onChange={e => setNewTape({...newTape, title: e.target.value})}
-                        placeholder="เช่น มหากาพย์ตัวแปรสภาวะ Dynamic Graph Layout"
+                        placeholder="เช่น Tape 1 : Overview of this course"
                         className="w-full px-3 py-1.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-amber-500"
                       />
                     </div>
@@ -620,7 +620,7 @@ export default function Courses() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-1"><Upload className="w-2.5 h-2.5"/> อัปโหลดชีท/เอกสารประกอบเทปเรียน</label>
+                      <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-1"><Upload className="w-2.5 h-2.5"/> อัปโหลดชีท/เอกสารประกอบการเรียน</label>
                       <input 
                         type="file" multiple
                         onChange={handleMaterialsUpload}
