@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, Play, FileText, Download, CheckCircle, ChevronRight, 
   ChevronDown, ArrowLeft, Bookmark, Shield, Plus, Clock, 
-  BookOpen, Award, Video, Trash2, Eye, EyeOff, FolderPlus, Upload, LogOut
+  BookOpen, Award, Video, Trash2, Eye, EyeOff, FolderPlus, Upload
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext'; // เชื่อมโยง AuthContext เดียวกับ Home.jsx
+import { useAuth } from '../context/AuthContext'; // ดึงใช้ AuthContext ตัวเดียวกับ Home.jsx
 
 const INITIAL_COURSES = [
   {
@@ -22,16 +22,13 @@ const INITIAL_COURSES = [
 ];
 
 export default function Courses() {
-  const { user } = useAuth(); // ดึงข้อมูล Google User ที่ล็อกอินอยู่จริง
+  const { user } = useAuth(); // ดึงข้อมูล User จากระบบ Google Sign-In จริง
   
-  // --- CONFIG: รายชื่ออีเมลที่ได้รับสิทธิ์ระบบหลังบ้าน ---
-  const SUPER_ADMIN_EMAILS = ['in.klang2551@gmail.com']; 
-  const ADMIN_EMAILS = ['example@gmail.com', 'staff-member@atier.org'];
-
-  // --- DERIVED SECURITY STATES (เช็คสดจาก Google Session) ---
-  const isSuperAdmin = user && SUPER_ADMIN_EMAILS.includes(user.email);
-  const isAdmin = user && ADMIN_EMAILS.includes(user.email);
-  const hasAdminPrivileges = isAdmin || isSuperAdmin; // เป็นอย่างใดอย่างหนึ่งถือว่าเป็น Staff
+  // --- AUTH CONFIG: อ้างอิงรายชื่ออีเมลผู้มีสิทธิ์ Admin จาก Home.jsx ---
+  const ADMIN_EMAILS = ['in.klang2551@gmail.com', 'example@gmail.com'];
+  
+  // เช็คสิทธิ์แบบ Dynamic ตรงจาก Session
+  const hasAdminPrivileges = user && ADMIN_EMAILS.includes(user.email);
 
   // --- CORE SYSTEM STATES ---
   const [courses, setCourses] = useState(() => {
@@ -49,7 +46,7 @@ export default function Courses() {
     return savedLastWatched ? JSON.parse(savedLastWatched) : {};
   });
 
-  // ใช้สำหรับการเปิด-ปิด หน้าต่างโหมดแอดมิน (ล้อตามสไตล์ไฟล์ Home.jsx)
+  // สถานะการเปิด-ปิด โหมดแอดมินเพื่อปรับแก้ข้อมูล (ล้อตามสไตล์หน้า Home.jsx)
   const [isAdminModeActive, setIsAdminModeActive] = useState(false);
 
   const [checkpoints, setCheckpoints] = useState({});
@@ -57,20 +54,18 @@ export default function Courses() {
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [currentLecture, setCurrentLecture] = useState(null);
   const [expandedLecture, setExpandedLecture] = useState(null);
-  const [mockTime, setMockTime] = useState("00:00:00");
-  const [activeCheckpointMsg, setActiveCheckpointMsg] = useState("");
 
-  // FORM INPUT STATES
+  // FORM INPUT STATES (สำหรับเพิ่มข้อมูลหลังบ้าน)
   const [newCourse, setNewCourse] = useState({ title: '', category: '', instructor: '', imageUrl: '', description: '' });
   const [newTape, setNewTape] = useState({ title: '', duration: '1h 30m', videoUrl: '' });
   const [uploadedMaterials, setUploadedMaterials] = useState([]);
 
-  // Sync กับฐานข้อมูลจำลองสม่ำเสมอ
+  // คอย Sync ข้อมูลลง LocalStorage เมื่อมีการเปลี่ยนแปลง
   useEffect(() => { localStorage.setItem('atier_courses', JSON.stringify(courses)); }, [courses]);
   useEffect(() => { localStorage.setItem('atier_completed_lectures', JSON.stringify(completedLectures)); }, [completedLectures]);
   useEffect(() => { localStorage.setItem('atier_last_watched', JSON.stringify(lastWatchedTape)); }, [lastWatchedTape]);
 
-  // หาก User หลุดจากการล็อกอิน ให้ปิดโหมด Admin อัตโนมัติทันที
+  // ป้องกันกรณี User Logout ให้ดีดออกจากโหมด Admin ทันที
   useEffect(() => {
     if (!hasAdminPrivileges) {
       setIsAdminModeActive(false);
@@ -106,10 +101,9 @@ export default function Courses() {
     Promise.all(promises).then(results => setUploadedMaterials(results));
   };
 
-  // --- NAVIGATION LOGIC ---
+  // --- STUDENT PLATFORM INTERACTION ---
   const handleSelectCourse = (course) => {
     setSelectedCourse(course);
-    setActiveCheckpointMsg("");
     const lastTapeId = lastWatchedTape[course.id];
     const savedLecture = course.lectures.find(l => l.id === lastTapeId);
     const targetLecture = savedLecture || course.lectures[0] || null;
@@ -119,11 +113,10 @@ export default function Courses() {
 
   const handleSelectLecture = (lecture) => {
     setCurrentLecture(lecture);
-    setActiveCheckpointMsg("");
     setLastWatchedTape(prev => ({ ...prev, [selectedCourse.id]: lecture.id }));
   };
 
-  const toggleLectureCompletion = (lectureId, e, courseId) => {
+  const toggleLectureCompletion = (lectureId, e) => {
     if (e) e.stopPropagation();
     setCompletedLectures(prev => ({ ...prev, [lectureId]: !prev[lectureId] }));
   };
@@ -134,24 +127,18 @@ export default function Courses() {
     return Math.round((finishedCount / course.lectures.length) * 100);
   };
 
-  const saveCurrentCheckpoint = () => {
-    if (!currentLecture) return;
-    setCheckpoints(prev => ({ ...prev, [currentLecture.id]: "00:42:19" }));
-    setActiveCheckpointMsg(`Progress checkpoint saved securely!`);
-  };
-
-  // --- 🔒 HARDENED SECURE BACKOFFICE FUNCTIONS ---
-  // ทุกฟังก์ชันจะรีเทิร์นออกทันทีหากพบว่าไม่มีสิทธิ์จริงในระบบ Session (ป้องกันการยิงคำสั่งตรง)
+  // --- 🔒 BACKOFFICE MANAGEMENT FUNCTIONS (Gated for Admins) ---
   
+  // 1. ฟังก์ชันเพิ่มคอร์สเรียนใหม่
   const handleCreateCourse = (e) => {
     e.preventDefault();
-    if (!hasAdminPrivileges) return; // Blocked if malicious call
+    if (!hasAdminPrivileges) return;
 
     const createdItem = {
       id: `course-${Date.now()}`,
       title: newCourse.title,
       description: newCourse.description,
-      category: newCourse.category || "General",
+      category: newCourse.category || "General Context",
       instructor: newCourse.instructor || "Guest Lecturer",
       imageUrl: newCourse.imageUrl || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600",
       isHidden: false,
@@ -163,24 +150,25 @@ export default function Courses() {
     e.target.reset();
   };
 
+  // 2. ฟังก์ชันลบคอร์สเรียน [กลับมาแล้ว]
   const handleDeleteCourse = (courseId, e) => {
-    e.stopPropagation();
-    if (!isSuperAdmin) {
-      alert("ปฏิเสธการเข้าถึง: เฉพาะสิทธิ์ Super Admin เท่านั้นที่สามารถลบคอร์สเรียนได้!");
-      return;
-    }
-    if (window.confirm("คุณต้องการลบคอร์สเรียนนี้รวมถึงเทปเรียนทั้งหมดใช่หรือไม่?")) {
+    e.stopPropagation(); // ไม่ให้สืบทอดไปโดน Event คลิกเลือกคอร์ส
+    if (!hasAdminPrivileges) return;
+    
+    if (window.confirm("คุณต้องการลบคอร์สเรียนนี้รวมถึงเทปบรรยายทั้งหมดในคอร์สใช่หรือไม่? (กระบวนการนี้ไม่สามารถย้อนคืนได้)")) {
       setCourses(courses.filter(c => c.id !== courseId));
       if (selectedCourse?.id === courseId) setSelectedCourse(null);
     }
   };
 
+  // 3. ฟังก์ชันซ่อน/แสดงคอร์สเรียน [กลับมาแล้ว]
   const toggleCourseVisibility = (courseId, e) => {
     e.stopPropagation();
     if (!hasAdminPrivileges) return;
     setCourses(courses.map(c => c.id === courseId ? { ...c, isHidden: !c.isHidden } : c));
   };
 
+  // 4. ฟังก์ชันเพิ่มเทปเรียนย่อยในคอร์ส
   const handleAddTape = (e) => {
     e.preventDefault();
     if (!hasAdminPrivileges || !selectedCourse) return;
@@ -205,12 +193,10 @@ export default function Courses() {
     e.target.reset();
   };
 
+  // 5. ฟังก์ชันลบเทปเรียนย่อย
   const handleDeleteTape = (tapeId) => {
-    if (!isSuperAdmin) {
-      alert("ปฏิเสธการเข้าถึง: เฉพาะสิทธิ์ Super Admin เท่านั้นที่สามารถลบเทปเรียนได้!");
-      return;
-    }
-    if (!window.confirm("ต้องการลบเทปเรียนนี้ออกใช่หรือไม่?")) return;
+    if (!hasAdminPrivileges) return;
+    if (!window.confirm("คุณมั่นใจชัวร์นะที่จะลบเทปคำบรรยายวิชานี้ออก?")) return;
 
     const updatedCatalog = courses.map(c => {
       if (c.id === selectedCourse.id) return { ...c, lectures: c.lectures.filter(l => l.id !== tapeId) };
@@ -223,7 +209,7 @@ export default function Courses() {
     if (currentLecture?.id === tapeId) setCurrentLecture(refreshedCourse.lectures[0] || null);
   };
 
-  // กรองคอร์สที่ซ่อนอยู่ไม่ให้นักเรียนเห็น
+  // ระบบกรอง Filter คอร์ส (ถ้าเป็นนร.ทั่วไป จะไม่เห็นอันที่ถูก ซ่อน/Hidden อยู่)
   const filteredCourses = courses.filter(course => {
     const matchSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                         course.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -234,43 +220,41 @@ export default function Courses() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-50 transition-colors duration-200">
       
-      {/* HEADER PLATFORM BAR */}
+      {/* TOP NAVIGATION HEAD BAR */}
       <div className="max-w-7xl mx-auto px-4 pt-10 pb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200/60 dark:border-zinc-900/60">
         <div>
           <span className="text-xs font-bold tracking-widest text-blue-600 dark:text-blue-400 uppercase flex items-center gap-1.5">
-            <Award className="w-4 h-4" /> ATier Course Management System
+            <Award className="w-4 h-4" /> High-Performance Ecosystem
           </span>
-          <h1 className="text-3xl font-extrabold tracking-tight mt-1">OnDemand Portal Console</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight mt-1">ATier Courses Console</h1>
         </div>
 
-        {/* SECURE TOGGLE SWITCH: แสดงเฉพาะเมื่อประมวลผลแล้วว่าคุณล็อกอินด้วย Google Account ที่ตรงเงื่อนไขเท่านั้น */}
+        {/* ADMIN TOGGLE VIEW (แสดงเฉพาะเมื่อล็อกอินด้วย Email แอดมินตามไฟล์ Home.jsx เท่านั้น) */}
         {hasAdminPrivileges && (
           <button 
             onClick={() => setIsAdminModeActive(!isAdminModeActive)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold border text-xs transition-all shadow-sm ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-full font-medium border text-sm transition-all shadow-sm ${
               isAdminModeActive 
                 ? 'bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-400' 
-                : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-100'
+                : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800'
             }`}
           >
             <Shield className="w-4 h-4" />
-            <span>{isAdminModeActive ? `Admin View: ${isSuperAdmin ? 'SUPER ADMIN' : 'STAFF'}` : 'Public View'}</span>
+            <span>{isAdminModeActive ? 'Admin View: Active' : 'Public View'}</span>
           </button>
         )}
       </div>
 
-      {/* DASHBOARD CATALOGUE MAIN AREA */}
+      {/* CORE PLATFORM INTERFACE */}
       {!selectedCourse ? (
         <div className="max-w-7xl mx-auto px-4 py-10 space-y-8">
           
-          {/* UPLOAD PANEL: จะไม่เรนเดอร์ใน DOM เลยถ้านักเรียนล็อกอินเข้ามา */}
+          {/* ฟอร์มสร้างคอร์สเรียน (แสดงเฉพาะเมื่อสิทธิ์ผ่านและเปิดโหมดแอดมิน) */}
           {hasAdminPrivileges && isAdminModeActive && (
-            <div className="bg-white dark:bg-zinc-900 border border-amber-500/30 rounded-2xl p-6 shadow-xl space-y-4">
+            <div className="bg-white dark:bg-zinc-900 border border-amber-500/30 rounded-2xl p-6 shadow-xl space-y-4 animate-fade-in">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-zinc-800">
                 <FolderPlus className="w-5 h-5 text-amber-500" />
-                <h2 className="text-base font-bold text-slate-800 dark:text-zinc-100 uppercase tracking-wide">
-                  Backoffice: Upload New Course ({isSuperAdmin ? 'Super Admin Control' : 'Staff Level'})
-                </h2>
+                <h2 className="text-base font-bold text-slate-800 dark:text-zinc-100 uppercase tracking-wide">Backoffice: Add New Course</h2>
               </div>
               
               <form onSubmit={handleCreateCourse} className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -281,7 +265,7 @@ export default function Courses() {
                     className="w-full px-4 py-2.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-amber-500"
                   />
                   <textarea 
-                    required placeholder="คำอธิบายรายละเอียดวิชาเชิงลึกด้านล่างคอร์สเรียน..." rows="3"
+                    required placeholder="คำอธิบายรายละเอียดบทเรียนเชิงลึก..." rows="3"
                     value={newCourse.description} onChange={e => setNewCourse({...newCourse, description: e.target.value})}
                     className="w-full px-4 py-2.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-amber-500"
                   />
@@ -307,17 +291,17 @@ export default function Courses() {
             </div>
           )}
 
-          {/* Search Bar */}
-          <div className="max-w-md bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-2 flex items-center gap-2 shadow-sm">
+          {/* Search Box */}
+          <div className="max-w-md bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-2 flex items-center gap-2 shadow-sm focus-within:border-blue-500 transition-colors">
             <Search className="w-5 h-5 text-slate-400 ml-2" />
             <input 
-              type="text" placeholder="ค้นหาคอร์สเรียนกวดวิชา..." value={searchQuery}
+              type="text" placeholder="ค้นหาคอร์สเรียนกวดวิชา สอวน. และเนื้อหาต่าง ๆ..." value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-transparent text-sm text-slate-800 dark:text-zinc-200 focus:outline-none pr-2"
             />
           </div>
 
-          {/* GRID CARDS */}
+          {/* CATALOGUE GRID */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredCourses.map((course) => {
               const progressPercent = getCourseProgress(course);
@@ -333,26 +317,26 @@ export default function Courses() {
                         {course.category}
                       </div>
 
-                      {/* ACTION BUTTONS GATE BY ROLE */}
+                      {/* [ฟังก์ชันซ่อน และ ลบคอร์สเรียน กลับมาครบแล้ว] */}
                       {hasAdminPrivileges && isAdminModeActive && (
                         <div className="absolute top-3 right-3 flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                          {/* ปุ่มซ่อนคอร์ส */}
                           <button 
                             onClick={(e) => toggleCourseVisibility(course.id, e)}
                             className={`p-1.5 rounded-lg backdrop-blur-md text-white transition-colors ${course.isHidden ? 'bg-amber-600' : 'bg-slate-900/80 hover:bg-slate-800'}`}
+                            title={course.isHidden ? "คลิกเพื่อยกเลิกการซ่อน" : "คลิกเพื่อซ่อนคอร์สเรียน"}
                           >
-                            {course.isHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            {course.isHidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                           </button>
                           
-                          {/* เฉพาะ Super Admin เท่านั้นที่จะมีปุ่มถังขยะถูกสร้างขึ้นมาบนจอ */}
-                          {isSuperAdmin && (
-                            <button 
-                              onClick={(e) => handleDeleteCourse(course.id, e)}
-                              className="p-1.5 rounded-lg bg-red-600/90 hover:bg-red-600 text-white transition-colors"
-                              title="ลบคอร์สเรียน"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                          {/* ปุ่มลบคอร์ส */}
+                          <button 
+                            onClick={(e) => handleDeleteCourse(course.id, e)}
+                            className="p-1.5 rounded-lg bg-red-600/90 hover:bg-red-600 text-white transition-colors shadow-sm"
+                            title="ลบคอร์สเรียนนี้ออก"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       )}
                     </div>
@@ -383,36 +367,33 @@ export default function Courses() {
         </div>
       ) : (
         
-        /* VIDEO PLAYER MODE */
+        /* VIDEO PLAYER & ACCORDION SCREEN */
         <div className="max-w-7xl mx-auto px-4 py-8">
-          <button onClick={() => setSelectedCourse(null)} className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:white mb-6 bg-white dark:bg-zinc-900 px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm">
-            <ArrowLeft className="w-3.5 h-3.5" /> Dashboard
+          <button onClick={() => setSelectedCourse(null)} className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white mb-6 bg-white dark:bg-zinc-900 px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm">
+            <ArrowLeft className="w-3.5 h-3.5" /> แผงควบคุมหลัก Dashboard
           </button>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
             <div className="lg:col-span-2 space-y-4">
-              <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black border border-slate-200 shadow-xl">
+              <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black border border-slate-200 dark:border-zinc-800 shadow-xl">
                 {currentLecture ? (
                   <iframe title={currentLecture.title} src={`https://www.youtube.com/embed/${currentLecture.videoId}?autoplay=1&modestbranding=1&rel=0`} className="w-full h-full border-0 absolute inset-0" allowFullScreen></iframe>
                 ) : (
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-400 bg-zinc-900">
                     <Video className="w-12 h-12 text-slate-600 mb-3" />
-                    <p className="text-sm font-semibold text-white">ยังไม่มีเทปคำบรรยายในคอร์สนี้</p>
+                    <p className="text-sm font-semibold text-white">คอร์สนี้ยังไม่มีเทปเรียนวิดีโอ</p>
                   </div>
                 )}
               </div>
 
               <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
                 <div className="space-y-1">
-                  <h2 className="text-xl font-bold tracking-tight">{currentLecture?.title || "โปรดเลือกบทเรียนเพื่อเริ่มเรียน"}</h2>
+                  <h2 className="text-xl font-bold tracking-tight">{currentLecture?.title || "โปรดคลิกเลือกเทปเรียนเพื่อเริ่มวิดีโอ"}</h2>
                   <p className="text-xs text-slate-400 dark:text-zinc-500 flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> Runtime: {currentLecture?.duration || "0h 00m"}</p>
                 </div>
                 {currentLecture && (
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={saveCurrentCheckpoint} className="px-3.5 py-2 text-xs font-bold rounded-xl bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300">
-                      Checkpoint
-                    </button>
-                    <button onClick={() => toggleLectureCompletion(currentLecture.id, null, selectedCourse.id)} className={`px-3.5 py-2 text-xs font-bold rounded-xl ${completedLectures[currentLecture.id] ? 'bg-emerald-500 text-white' : 'bg-blue-600 text-white'}`}>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => toggleLectureCompletion(currentLecture.id, null)} className={`px-4 py-2 text-xs font-bold rounded-xl transition-colors ${completedLectures[currentLecture.id] ? 'bg-emerald-500 text-white' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
                       {completedLectures[currentLecture.id] ? 'Finished' : 'Mark as Finished'}
                     </button>
                   </div>
@@ -443,8 +424,8 @@ export default function Courses() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            {/* เฉพาะ Super Admin เท่านั้นที่เห็นปุ่มลบเทปเรียนย่อย */}
-                            {hasAdminPrivileges && isAdminModeActive && isSuperAdmin && (
+                            {/* ปุ่มลบเทปบทเรียนย่อย (เห็นเฉพาะตอนสิทธิ์ผ่านและเปิดโหมดแอดมิน) */}
+                            {hasAdminPrivileges && isAdminModeActive && (
                               <button onClick={(e) => { e.stopPropagation(); handleDeleteTape(lecture.id); }} className="p-1 text-slate-400 hover:text-red-500 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                             )}
                             {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
@@ -472,9 +453,9 @@ export default function Courses() {
                 )}
               </div>
 
-              {/* ADD TAPE PANEL FOR ADMIN/SUPER ADMIN */}
+              {/* ส่วนจัดการเพิ่มเทปเรียนหลังบ้าน (แสดงเฉพาะตอนเปิดโหมดแอดมิน) */}
               {hasAdminPrivileges && isAdminModeActive && (
-                <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-5 space-y-4">
+                <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-5 space-y-4 animate-fade-in">
                   <div className="flex items-center gap-2 pb-2 border-b border-amber-500/10">
                     <Video className="w-4 h-4 text-amber-500" />
                     <h4 className="text-xs font-bold uppercase text-amber-600">Add Course Tape Record</h4>
@@ -487,7 +468,7 @@ export default function Courses() {
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-slate-400 mb-1">อัปโหลดไฟล์ชีทเข้าคอร์ส</label>
-                      <input type="file" multiple onChange={handleMaterialsUpload} className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-amber-100 file:text-amber-800 cursor-pointer" />
+                      <input type="file" multiple onChange={handleMaterialsUpload} className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200 cursor-pointer" />
                     </div>
                     <button type="submit" className="w-full py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs shadow-sm">+ Add Tape & Resources</button>
                   </form>
