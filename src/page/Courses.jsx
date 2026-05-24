@@ -58,15 +58,22 @@ export default function Courses() {
   const [uploadedMaterials, setUploadedMaterials] = useState([]); 
 
   // 3. ระบบยืนยันตัวตนแอดมิน (คัดลอก Logic มาจากหน้า Home.jsx เป๊ะๆ)
+  export default function Courses() {
+  const { user, role } = useAuth(); // ดึง user และ role มาจาก Supabase Auth
+  const [isAdminModeActive, setIsAdminModeActive] = useState(false);
+
+  // เช็คสิทธิ์จากระดับตำแหน่ง (Role) แทนอีเมล
+  const isSuperAdmin = role === 'super_admin';
+  const isAdminUser = role === 'admin' || role === 'super_admin';
+
   useEffect(() => {
-    const adminEmails = ['in.klang2551@gmail.com', 'example@gmail.com'];
-    if (user && adminEmails.includes(user.email)) {
-      setIsAdminUser(true);
-    } else {
-      setIsAdminUser(false);
-      setIsAdmin(false); // ถ้าไม่ได้เป็นแอดมินหรือหลุด Session ให้ปิดโหมดหลังบ้านอัตโนมัติ
+    if (!isAdminUser) {
+      setIsAdminModeActive(false);
     }
-  }, [user]);
+  }, [role, isAdminUser]);
+  
+  // ... โค้ดส่วนอื่นๆ คงเดิมไว้ได้เลยครับ ...
+}
 
   // Sync state to local storage automatically when modified
   useEffect(() => {
@@ -443,7 +450,7 @@ export default function Courses() {
             onClick={() => setSelectedCourse(null)}
             className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white mb-6 bg-white dark:bg-zinc-900 px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm transition-all"
           >
-            <ArrowLeft className="w-3.5 h-3.5" /> แผงควบคุมหน้าหลัก (Dashboard)
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
           </button>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
@@ -650,7 +657,7 @@ export default function Courses() {
                       <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1">หัวข้อบทเรียนประยุกต์สอน (Tape Title)</label>
                       <input 
                         type="text" required value={newTape.title} onChange={e => setNewTape({...newTape, title: e.target.value})}
-                        placeholder="เช่น มหากาพย์ตัวแปรสภาวะ Dynamic Graph Layout"
+                        placeholder="เช่น Tape 1 : Overview of this course"
                         className="w-full px-3 py-1.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-amber-500"
                       />
                     </div>
@@ -676,7 +683,7 @@ export default function Courses() {
 
                     {/* DIRECT FILE INPUT FOR MATERIALS UPLOAD */}
                     <div>
-                      <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-1"><Upload className="w-2.5 h-2.5"/> อัปโหลดชีท/เอกสารประกอบเทปเรียน (เลือกได้หลายไฟล์)</label>
+                      <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-1"><Upload className="w-2.5 h-2.5"/> อัปโหลดชีท/เอกสารประกอบการเรียน (เลือกได้ไฟล์เดียว)</label>
                       <input 
                         type="file" multiple
                         onChange={handleMaterialsUpload}
