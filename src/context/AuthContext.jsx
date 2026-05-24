@@ -5,18 +5,53 @@ const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [role, setRole] = useState(null); // ✨ เพิ่มสเตทสำหรับเก็บสิทธิ์ผู้ใช้
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // 1. ตรวจสอบ Session ปัจจุบันเมื่อเปิดเว็บขึ้นมา
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+  // 🔍 ฟังก์ชันดึงค่าสิทธิ์ (role) จากตาราง public.profiles ข้ามตาราง
+  const fetchUserRole = async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single();
+      
+      if (error) throw error;
+      setRole(data?.role ?? null); // บันทึกสิทธิ์ เช่น 'Super Admin' หรือ 'Admin' ลงสเตท
+    } catch (err) {
+      console.error("Error fetching user role from profiles:", err.message);
+      setRole(null);
+    }
+  };
 
-    // 2. เฝ้าติดตามการเปลี่ยนแปลงสถานะ (เช่น มีการ Login หรือ Logout)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+  useEffect(() => {
+    // 1. ตรวจสอบ Session ปัจจุบันเมื่อเปิดเว็บขึ้นมาครั้งแรก
+    const initializeAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      
+      if (currentUser) {
+        await fetchUserRole(currentUser.id); // ดึงสิทธิ์มาเก็บก่อนปิด Loading
+      } else {
+        setRole(null);
+      }
+      setLoading(false);
+    };
+
+    initializeAuth();
+
+    // 2. เฝ้าติดตามการเปลี่ยนแปลงสถานะระบบ (เช่น มีการ Login หรือ Logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      
+      if (currentUser) {
+        await fetchUserRole(currentUser.id); // ดึงสิทธิ์ใหม่ทันทีที่ล็อกอินสำเร็จ
+      } else {
+        setRole(null); // ล้างสิทธิ์เมื่อออกจากระบบ
+      }
       setLoading(false);
     });
 
@@ -41,13 +76,13 @@ export function AuthProvider({ children }) {
   };
 
   // ฟังก์ชันล็อกเอาต์
-
   const logout = async () => {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       
       setUser(null); 
+      setRole(null); // เคลียร์ค่าสิทธิ์หลังล็อกเอาต์สำเร็จ
       console.log("Logged out successfully");
     } catch (error) {
       console.error("Error logging out:", error.message);
@@ -56,9 +91,10 @@ export function AuthProvider({ children }) {
 
   const value = {
     user,
+    role, // ✨ ส่งออกค่า role ไปให้หน้า Home และ Courses นำไปตรวจสอบสิทธิ์
     signUp,
     logIn,
-    logout, // เปลี่ยนชื่อตรงนี้ให้เป็น logout
+    logout, 
     loginWithGoogle,
     loading
   };
@@ -67,7 +103,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={value}>
       {loading ? (
         <div className="flex min-h-screen items-center justify-center bg-white dark:bg-gray-900 text-gray-500">
-          <p className="animate-pulse font-medium">กำลังโหลดข้อมูลระบบ...</p>
+          <p className="animate-pulse font-medium">กำลังโหลดข้อมูลระบบและตรวจสอบสิทธิ์...</p>
         </div>
       ) : (
         children
