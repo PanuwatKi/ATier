@@ -15,23 +15,23 @@ export default function Footer() {
               ATier
             </span>
             <p className="mt-1 text-xs max-w-md text-gray-400 dark:text-gray-500">
-              แพลตฟอร์มการเรียนรู้และขับเคลื่อนนวัตกรรมสู่ระดับสากล มุ่งมั่นสร้างสรรค์เทคโนโลยีเพื่ออนาคตที่ดีกว่า
+              A group of boys
             </p>
           </div>
 
           {/* ฝั่งขวา: เมนูด่วน */}
           <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs font-medium">
-            <Link to="/" className="hover:text-blue-500 dark:hover:text-blue-400 transition-colors">หน้าแรก</Link>
-            <Link to="/projects" className="hover:text-blue-500 dark:hover:text-blue-400 transition-colors">ผลงาน</Link>
-            <Link to="/courses" className="hover:text-blue-500 dark:hover:text-blue-400 transition-colors">คอร์สเรียน</Link>
-            <Link to="/posts" className="hover:text-blue-500 dark:hover:text-blue-400 transition-colors">บทความ</Link>
+            <Link to="/" className="hover:text-blue-500 dark:hover:text-blue-400 transition-colors">Home</Link>
+            <Link to="/projects" className="hover:text-blue-500 dark:hover:text-blue-400 transition-colors">Projects</Link>
+            <Link to="/courses" className="hover:text-blue-500 dark:hover:text-blue-400 transition-colors">Courses</Link>
+            <Link to="/posts" className="hover:text-blue-500 dark:hover:text-blue-400 transition-colors">Posts</Link>
           </div>
           
         </div>
 
         {/* เส้นคั่นลิขสิทธิ์ */}
         <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-900 text-center text-[11px] text-gray-400 dark:text-gray-600">
-          &copy; {currentYear} ATier Organization. All rights reserved.
+          &copy; {currentYear} Panuwat' Dev. All rights reserved.
         </div>
       </div>
     </footer>

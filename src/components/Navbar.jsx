@@ -18,10 +18,10 @@ export default function Navbar() {
   const role = user?.user_metadata?.role || "User";
 
   const navLinks = [
-    { name: 'หน้าแรก', path: '/' },
-    { name: 'ผลงานประยุกต์', path: '/projects' },
-    { name: 'คอร์สเรียน', path: '/courses' },
-    { name: 'บล็อก/บทความ', path: '/posts' },
+    { name: 'Home', path: '/' },
+    { name: 'Projects', path: '/projects' },
+    { name: 'Courses', path: '/courses' },
+    { name: 'Posts', path: '/posts' },
   ];
 
   return (
@@ -88,7 +88,7 @@ export default function Navbar() {
                 onClick={loginWithGoogle}
                 className="flex items-center space-x-2 px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl hover:shadow-lg hover:shadow-blue-500/20 active:scale-95 transition-all duration-200"
               >
-                เข้าสู่ระบบด้วย Google
+                Login with Google
               </button>
             )}
           </div>
