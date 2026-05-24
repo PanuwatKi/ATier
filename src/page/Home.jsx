@@ -43,17 +43,14 @@ export default function Home() {
     phone: true, ig: true, line: true, email: true,
   });
 
-  const { user, role } = useAuth(); // ดึง role มาจากระบบ Supabase Context
-const [isAdmin, setIsAdmin] = useState(false);
-
 useEffect(() => {
-  // ถ้า role เป็น admin หรือ super_admin ให้เปิดสิทธิ์แอดมินหน้าโฮมทันที
-  if (user && (role === 'admin' || role === 'super_admin')) {
+  const adminEmails = ['in.klang2551@gmail.com', 'example@gmail.com'];
+  if (user && adminEmails.includes(user.email)) {
     setIsAdmin(true);
   } else {
     setIsAdmin(false);
   }
-}, [user, role]); // ใส่ role เข้าไปใน dependency เพื่อให้อัปเดตแบบเรียลไทม์
+}, [user]);
 
   const openModal = (member) => setSelectedMember(member);
   const closeModal = () => setSelectedMember(null);

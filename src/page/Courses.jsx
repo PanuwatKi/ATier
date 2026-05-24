@@ -4,7 +4,7 @@ import {
   ChevronDown, ArrowLeft, Bookmark, Shield, Plus, Clock, 
   BookOpen, Award, Video, Trash2, Eye, EyeOff, FolderPlus, Link2, Upload
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext'; // 1. ดึงใช้ระบบลงชื่อเข้าใช้ตัวเดียวกับ Home.jsx
+import { useAuth } from '../context/AuthContext'; // เพิ่มการ Import ระบบดึงสิทธิ์จาก Supabase
 
 // โครงสร้างข้อมูลเริ่มต้นจำลองสไตล์กวดวิชาชั้นนำ
 const INITIAL_COURSES = [
@@ -24,9 +24,20 @@ const INITIAL_COURSES = [
 ];
 
 export default function Courses() {
-  const { user } = useAuth(); // 2. เรียกใช้ข้อมูลสิทธิ์ผู้ใช้งานปัจจุบัน
-  const [isAdminUser, setIsAdminUser] = useState(false); // สิทธิ์ว่าเป็นกลุ่มแอดมินตัวจริงไหม
-  const [isAdmin, setIsAdmin] = useState(false); // สถานะการสลับเปิด/ปิดโหมดแก้ไขข้อมูลหลังบ้าน
+  // --- SUPABASE ROLE & AUTHORIZATION CENTRAL SYSTEM ---
+  const { user, role } = useAuth(); 
+  const [isAdminModeActive, setIsAdminModeActive] = useState(false); // ควบคุมการสลับโหมดเปิด/ปิดหน้าหลังบ้าน
+
+  // เช็คระดับความปลอดภัยจาก Database Role โดยตรง
+  const isAdminUser = role === 'admin' || role === 'super_admin';
+  const isSuperAdmin = role === 'super_admin';
+
+  // ระบบป้องกันสิทธิ์หลุด: ปิดโหมดแอดมินทันทีหากไม่ได้ล็อกอินหรือไม่มีสิทธิ์
+  useEffect(() => {
+    if (!isAdminUser) {
+      setIsAdminModeActive(false);
+    }
+  }, [role, isAdminUser]);
 
   // --- LOCAL STORAGE CORE SYNCHRONIZATION ---
   const [courses, setCourses] = useState(() => {
@@ -57,24 +68,6 @@ export default function Courses() {
   const [newTape, setNewTape] = useState({ title: '', duration: '1h 30m', videoUrl: '' });
   const [uploadedMaterials, setUploadedMaterials] = useState([]); 
 
-  // 3. ระบบยืนยันตัวตนแอดมิน (คัดลอก Logic มาจากหน้า Home.jsx เป๊ะๆ)
-  export default function Courses() {
-  const { user, role } = useAuth(); // ดึง user และ role มาจาก Supabase Auth
-  const [isAdminModeActive, setIsAdminModeActive] = useState(false);
-
-  // เช็คสิทธิ์จากระดับตำแหน่ง (Role) แทนอีเมล
-  const isSuperAdmin = role === 'super_admin';
-  const isAdminUser = role === 'admin' || role === 'super_admin';
-
-  useEffect(() => {
-    if (!isAdminUser) {
-      setIsAdminModeActive(false);
-    }
-  }, [role, isAdminUser]);
-  
-  // ... โค้ดส่วนอื่นๆ คงเดิมไว้ได้เลยครับ ...
-}
-
   // Sync state to local storage automatically when modified
   useEffect(() => {
     localStorage.setItem('atier_courses', JSON.stringify(courses));
@@ -96,7 +89,7 @@ export default function Courses() {
     return (match && match[2].length === 11) ? match[2] : url;
   };
 
-  // --- FILE UPLOAD HANDLERS (BASE64 CONVERTERS) ---
+  // --- FILE UPLOAD HANDLERS ---
   const handleCoverImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -114,10 +107,7 @@ export default function Courses() {
       return new Promise((resolve) => {
         const reader = new FileReader();
         reader.onloadend = () => {
-          resolve({
-            name: file.name,
-            data: reader.result 
-          });
+          resolve({ name: file.name, data: reader.result });
         };
         reader.readAsDataURL(file);
       });
@@ -128,7 +118,7 @@ export default function Courses() {
     });
   };
 
-  // --- STUDENT APP NAVIGATION LOGIC (WITH AUTO-RESUME HOOK) ---
+  // --- STUDENT APP NAVIGATION LOGIC ---
   const handleSelectCourse = (course) => {
     setSelectedCourse(course);
     setActiveCheckpointMsg("");
@@ -149,10 +139,7 @@ export default function Courses() {
     setCurrentLecture(lecture);
     setActiveCheckpointMsg("");
     
-    setLastWatchedTape(prev => ({
-      ...prev,
-      [selectedCourse.id]: lecture.id
-    }));
+    setLastWatchedTape(prev => ({ ...prev, [selectedCourse.id]: lecture.id }));
 
     if (checkpoints[lecture.id]) {
       setActiveCheckpointMsg(`Resumed from your saved checkpoint at ${checkpoints[lecture.id]}`);
@@ -183,10 +170,10 @@ export default function Courses() {
     setActiveCheckpointMsg(`Progress checkpoint saved securely at ${generatedTimestamp}!`);
   };
 
-  // --- BACKOFFICE ADMIN CONTROL PIPELINES (🔒 ปลอดภัยสูงสุดด้วยการเช็คซ้ำก่อนทำงาน) ---
+  // --- BACKOFFICE ADMIN CONTROL PIPELINES (With Guard Clauses) ---
   const handleCreateCourse = (e) => {
     e.preventDefault();
-    if (!isAdminUser) return; // บล็อกสิทธิ์ผู้ใช้งานทั่วไป
+    if (!isAdminUser) return; // บล็อกความปลอดภัยหลังบ้าน
     if (!newCourse.title || !newCourse.description) return;
 
     const createdItem = {
@@ -207,7 +194,7 @@ export default function Courses() {
 
   const handleDeleteCourse = (courseId, e) => {
     e.stopPropagation();
-    if (!isAdminUser) return; // บล็อกสิทธิ์ผู้ใช้งานทั่วไป
+    if (!isAdminUser) return;
     if (window.confirm("คุณต้องการลบคอร์สเรียนนี้รวมถึงเทปเรียนทั้งหมดใช่หรือไม่?")) {
       setCourses(courses.filter(c => c.id !== courseId));
       if (selectedCourse?.id === courseId) setSelectedCourse(null);
@@ -216,13 +203,13 @@ export default function Courses() {
 
   const toggleCourseVisibility = (courseId, e) => {
     e.stopPropagation();
-    if (!isAdminUser) return; // บล็อกสิทธิ์ผู้ใช้งานทั่วไป
+    if (!isAdminUser) return;
     setCourses(courses.map(c => c.id === courseId ? { ...c, isHidden: !c.isHidden } : c));
   };
 
   const handleAddTape = (e) => {
     e.preventDefault();
-    if (!isAdminUser) return; // บล็อกสิทธิ์ผู้ใช้งานทั่วไป
+    if (!isAdminUser) return;
     if (!newTape.title || !selectedCourse) return;
 
     const createdTape = {
@@ -248,7 +235,7 @@ export default function Courses() {
   };
 
   const handleDeleteTape = (tapeId) => {
-    if (!isAdminUser) return; // บล็อกสิทธิ์ผู้ใช้งานทั่วไป
+    if (!isAdminUser) return;
     if (!window.confirm("ต้องการลบเทปเรียนนี้ออกใช่หรือไม่?")) return;
 
     const updatedCatalog = courses.map(c => {
@@ -270,7 +257,9 @@ export default function Courses() {
   const filteredCourses = courses.filter(course => {
     const matchSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                         course.description.toLowerCase().includes(searchQuery.toLowerCase());
-    if (isAdminUser && isAdmin) return matchSearch; 
+    
+    // ถ้าผู้ใช้มีสิทธิ์และกำลังสลับเปิดโหมด Control Active ให้เห็นโครงสร้างทั้งหมด (รวมวิชาที่ถูกซ่อนอยู่)
+    if (isAdminUser && isAdminModeActive) return matchSearch; 
     return matchSearch && !course.isHidden; 
   });
 
@@ -286,18 +275,18 @@ export default function Courses() {
           <h1 className="text-3xl font-extrabold tracking-tight mt-1">OnDemand Portal Console</h1>
         </div>
 
-        {/* 4. ซ่อนปุ่มเปิดโหมดหลังบ้านทั้งหมดให้แสดงแค่คนที่มีสิทธิ์แอดมินตัวจริงเท่านั้น */}
+        {/* ปุ่มควบคุมเปลี่ยนโหมดแสดงผลสำหรับกลุ่มผู้ใช้ระดับสูง (Admin / Super Admin) */}
         {isAdminUser && (
           <button 
-            onClick={() => setIsAdmin(!isAdmin)}
+            onClick={() => setIsAdminModeActive(!isAdminModeActive)}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold border text-xs transition-all shadow-sm ${
-              isAdmin 
+              isAdminModeActive 
                 ? 'bg-amber-500 border-amber-600 text-white shadow-amber-500/10' 
                 : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-100'
             }`}
           >
             <Shield className="w-3.5 h-3.5" />
-            <span>{isAdmin ? 'BACKOFFICE CONTROL ACTIVE' : 'STUDENT MODE VIEW'}</span>
+            <span>{isAdminModeActive ? 'BACKOFFICE CONTROL ACTIVE' : 'STUDENT MODE VIEW'}</span>
           </button>
         )}
       </div>
@@ -307,8 +296,8 @@ export default function Courses() {
         /* 1. MAIN SYSTEM DASHBOARD */
         <div className="max-w-7xl mx-auto px-4 py-10 space-y-8">
           
-          {/* ADMIN: COURSE INJECTION ENGINE (WITH FILE UPLOAD) */}
-          {isAdminUser && isAdmin && (
+          {/* ADMIN: COURSE INJECTION ENGINE */}
+          {isAdminUser && isAdminModeActive && (
             <div className="bg-white dark:bg-zinc-900 border border-amber-500/30 rounded-2xl p-6 shadow-xl space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-zinc-800">
                 <FolderPlus className="w-5 h-5 text-amber-500" />
@@ -323,13 +312,12 @@ export default function Courses() {
                     className="w-full px-4 py-2.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-amber-500"
                   />
                   <textarea 
-                    required placeholder="คำอธิบายรายละเอียดวิชาเชิงลึกด้านล่างคอร์สเรียน (Detailed Course Descriptions...)" rows="3"
+                    required placeholder="คำอธิบายรายละเอียดวิชาเชิงลึกด้านล่างคอร์สเรียน..." rows="3"
                     value={newCourse.description} onChange={e => setNewCourse({...newCourse, description: e.target.value})}
                     className="w-full px-4 py-2.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-amber-500"
                   />
                 </div>
                 <div className="space-y-3 flex flex-col justify-between">
-                  {/* FILE UPLOAD FOR COVER IMAGE */}
                   <div className="space-y-1">
                     <label className="block text-[11px] font-bold text-slate-500 dark:text-zinc-400 flex items-center gap-1"><Upload className="w-3 h-3"/> อัปโหลดรูปปกคอร์สเรียน</label>
                     <input 
@@ -351,7 +339,7 @@ export default function Courses() {
                       className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-amber-500"
                     />
                   </div>
-                  <button type="submit" className="w-full py-2.5 bg-amber-500 text-slate-950 font-bold text-sm rounded-xl hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/10 flex items-center justify-center gap-1">
+                  <button type="submit" className="w-full py-2.5 bg-amber-500 text-slate-950 font-bold text-sm rounded-xl hover:bg-amber-400 transition-colors shadow-lg flex items-center justify-center gap-1">
                     <Plus className="w-4 h-4 stroke-[3]" /> Deploy New Course
                   </button>
                 </div>
@@ -359,7 +347,6 @@ export default function Courses() {
             </div>
           )}
 
-          {/* Search Engine Metrics Bar */}
           <div className="max-w-md bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-2 flex items-center gap-2 shadow-sm focus-within:border-blue-500 transition-colors">
             <Search className="w-5 h-5 text-slate-400 ml-2" />
             <input 
@@ -369,7 +356,6 @@ export default function Courses() {
             />
           </div>
 
-          {/* CATALOGUE GRID SYSTEM */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredCourses.map((course) => {
               const progressPercent = getCourseProgress(course);
@@ -382,13 +368,13 @@ export default function Courses() {
                     <div className="h-44 overflow-hidden relative bg-slate-100 dark:bg-zinc-800">
                       <img 
                         src={course.imageUrl} alt={course.title} 
-                        className="w-full h-full object-cover transform group-hover:scale-102 transition-transform duration-300"
+                        className="w-full h-full object-cover transform transition-transform duration-300"
                       />
                       <div className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md">
                         {course.category}
                       </div>
 
-                      {isAdminUser && isAdmin && (
+                      {isAdminUser && isAdminModeActive && (
                         <div className="absolute top-3 right-3 flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                           <button 
                             onClick={(e) => toggleCourseVisibility(course.id, e)}
@@ -450,12 +436,11 @@ export default function Courses() {
             onClick={() => setSelectedCourse(null)}
             className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white mb-6 bg-white dark:bg-zinc-900 px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm transition-all"
           >
-            <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
+            <ArrowLeft className="w-3.5 h-3.5" /> แผงควบคุมหน้าหลัก (Dashboard)
           </button>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
             
-            {/* LEFT FRAME INTERACTIVE VIDEO MONITOR WORKSPACE */}
             <div className="lg:col-span-2 space-y-4">
               <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black border border-slate-200 dark:border-zinc-800 shadow-xl group">
                 {currentLecture ? (
@@ -525,9 +510,7 @@ export default function Courses() {
               </div>
             </div>
 
-            {/* RIGHT SIDEBAR PLAYLIST ACCORDION SYSTEM & BACKOFFICE INJECTOR */}
             <div className="space-y-6">
-              
               <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-4 shadow-sm space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">ความคืบหน้าภาพรวมคอร์สนี้</span>
@@ -541,7 +524,6 @@ export default function Courses() {
                 </div>
               </div>
 
-              {/* PLAYLIST LOG MATRIX LOOP */}
               <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-sm overflow-hidden divide-y divide-slate-100 dark:divide-zinc-800/80">
                 <div className="p-4 bg-slate-50 dark:bg-zinc-900/50 flex justify-between items-center">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">Recorded Course Tapes ({selectedCourse.lectures?.length || 0})</h3>
@@ -584,7 +566,7 @@ export default function Courses() {
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
-                            {isAdminUser && isAdmin && (
+                            {isAdminUser && isAdminModeActive && (
                               <button 
                                 onClick={(e) => { e.stopPropagation(); handleDeleteTape(lecture.id); }}
                                 className="p-1 text-slate-400 hover:text-red-500 rounded transition-colors"
@@ -597,7 +579,6 @@ export default function Courses() {
                           </div>
                         </div>
 
-                        {/* Accordion Hidden Material Resources Attachments Drawer */}
                         {isExpanded && (
                           <div className="px-4 pb-4 pt-1 border-t border-dashed border-slate-100 dark:border-zinc-800/40 space-y-2 bg-slate-50/50 dark:bg-zinc-950/20">
                             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-zinc-500 flex items-center gap-1">
@@ -609,8 +590,6 @@ export default function Courses() {
                                 lecture.materials.map((file, idx) => (
                                   <div key={idx} className="flex items-center justify-between p-2 bg-white dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60 rounded-xl text-xs">
                                     <span className="font-medium text-slate-600 dark:text-zinc-400 truncate max-w-[170px]" title={file.name}>{file.name}</span>
-                                    
-                                    {/* DYNAMIC DOWNLOAD TRIGGER (Supports real file downloading if data exists) */}
                                     <a 
                                       href={file.data || "#"} 
                                       download={file.name}
@@ -644,8 +623,8 @@ export default function Courses() {
                 )}
               </div>
 
-              {/* CONDITIONAL BACKOFFICE ACTIVE CONSOLE: ADD TAPE INCLUDES ATTACHED SHEET */}
-              {isAdminUser && isAdmin && (
+              {/* CONDITIONAL BACKOFFICE ACTIVE CONSOLE: ADD TAPE */}
+              {isAdminUser && isAdminModeActive && (
                 <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-5 space-y-4">
                   <div className="flex items-center gap-2 pb-2 border-b border-amber-500/10">
                     <Video className="w-4 h-4 text-amber-500" />
@@ -657,7 +636,7 @@ export default function Courses() {
                       <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1">หัวข้อบทเรียนประยุกต์สอน (Tape Title)</label>
                       <input 
                         type="text" required value={newTape.title} onChange={e => setNewTape({...newTape, title: e.target.value})}
-                        placeholder="เช่น Tape 1 : Overview of this course"
+                        placeholder="เช่น มหากาพย์ตัวแปรสภาวะ Dynamic Graph Layout"
                         className="w-full px-3 py-1.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-amber-500"
                       />
                     </div>
@@ -681,9 +660,8 @@ export default function Courses() {
                       </div>
                     </div>
 
-                    {/* DIRECT FILE INPUT FOR MATERIALS UPLOAD */}
                     <div>
-                      <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-1"><Upload className="w-2.5 h-2.5"/> อัปโหลดชีท/เอกสารประกอบการเรียน (เลือกได้ไฟล์เดียว)</label>
+                      <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-1"><Upload className="w-2.5 h-2.5"/> อัปโหลดชีท/เอกสารประกอบเทปเรียน</label>
                       <input 
                         type="file" multiple
                         onChange={handleMaterialsUpload}
