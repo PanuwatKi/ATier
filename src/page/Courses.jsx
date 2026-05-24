@@ -23,7 +23,7 @@ export default function Courses() {
   const [tapeTitle, setTapeTitle] = useState('');
   const [tapeDuration, setTapeDuration] = useState('');
   const [tapeVideoId, setTapeVideoId] = useState('');
-  const [uploadedMaterials, setUploadedMaterials] = useState([]);
+  const [uploadedMaterials, setUploadedMaterials] = useState([]); // เก็บไฟล์ชีทจริงจากเครื่อง
 
   // --- States สำหรับสร้างคอร์สใหม่ + ไฟล์รูปภาพหน้าปก ---
   const [newCourseId, setNewCourseId] = useState('');
@@ -31,8 +31,8 @@ export default function Courses() {
   const [newCourseDesc, setNewCourseDesc] = useState('');
   const [newCourseCategory, setNewCourseCategory] = useState('Informatics');
   const [newCourseInstructor, setNewCourseInstructor] = useState('Ajarn ATier');
-  const [courseCoverFile, setCourseCoverFile] = useState(null); // 👈 สเตทสำหรับเก็บไฟล์รูปภาพจากเครื่อง
-  const [actionLoading, setActionLoading] = useState(false);   // สเตทสปินเนอร์ตอนกดยิงคำสั่งแอดมิน
+  const [courseCoverFile, setCourseCoverFile] = useState(null); 
+  const [actionLoading, setActionLoading] = useState(false);   
 
   // ==========================================
   // 1. ฟังก์ชันดึงข้อมูลจาก Supabase (Fetch Data)
@@ -59,6 +59,7 @@ export default function Courses() {
       
       setCourses(formattedData);
 
+      // ซิงค์ข้อมูลหน้าเจาะลึกที่เปิดค้างไว้ให้เป็นปัจจุบันด้วย
       if (selectedCourse) {
         const updatedCurrent = formattedData.find(c => c.id === selectedCourse.id);
         if (updatedCurrent) setSelectedCourse(updatedCurrent);
@@ -71,7 +72,7 @@ export default function Courses() {
   };
 
   // ==========================================
-  // 2. ตั้งค่าระบบ Real-time ซิงค์ข้อมูลข้ามเครื่อง
+  // 2. ตั้งค่าระบบ Real-time ซิงค์ข้ามอุปกรณ์
   // ==========================================
   useEffect(() => {
     fetchCourses();
@@ -81,7 +82,7 @@ export default function Courses() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'courses' },
-        (payload) => {
+        () => {
           fetchCourses();
         }
       )
@@ -90,22 +91,19 @@ export default function Courses() {
     return () => {
       supabase.removeChannel(courseChannel);
     };
-  }, [selectedCourse?.id]);
+  }, []);
 
   // ==========================================
   // 3. ฟังก์ชันสำหรับแอดมิน (Admin Functions)
   // ==========================================
   
+  // เก็บไฟล์ชีทเรียนเข้าสเตทเตรียมอัปโหลด
   const handleMaterialsUpload = (e) => {
     const files = Array.from(e.target.files);
-    const mockMaterials = files.map(file => ({
-      name: file.name,
-      data: "#"
-    }));
-    setUploadedMaterials(mockMaterials);
+    setUploadedMaterials(files);
   };
 
-  // 3.1 ฟังก์ชันเพิ่มเทปเรียนใหม่เข้าคอร์ส
+  // 3.1 [ปรับปรุงใหม่ ⚡] เพิ่มเทปเรียนใหม่ + อัปโหลดไฟล์เอกสารเข้า Storage จริง
   const handleAddTapeSubmit = async (e) => {
     e.preventDefault();
     if (!selectedCourseId || !tapeTitle || !tapeVideoId) {
@@ -118,12 +116,38 @@ export default function Courses() {
       const targetCourse = courses.find(c => c.id === selectedCourseId);
       if (!targetCourse) return;
 
+      const uploadedMaterialsData = [];
+
+      // วนลูปอัปโหลดไฟล์ชีทเรียนทีละไฟล์เข้าคลัง Storage จริงๆ
+      if (uploadedMaterials.length > 0) {
+        for (const file of uploadedMaterials) {
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${selectedCourseId}-${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileExt}`;
+          const filePath = `materials/${fileName}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('course-assets')
+            .upload(filePath, file);
+
+          if (uploadError) throw new Error(`ล้มเหลวขณะอัปโหลดไฟล์งาน: ${uploadError.message}`);
+
+          const { data: urlData } = supabase.storage
+            .from('course-assets')
+            .getPublicUrl(filePath);
+
+          uploadedMaterialsData.push({
+            name: file.name,
+            data: urlData.publicUrl
+          });
+        }
+      }
+
       const newLecture = {
         id: `l_${Date.now()}`,
         title: tapeTitle,
         duration: tapeDuration || "1h 30m",
         videoId: tapeVideoId,
-        materials: uploadedMaterials
+        materials: uploadedMaterialsData
       };
 
       const updatedLectures = [...targetCourse.lectures, newLecture];
@@ -135,46 +159,65 @@ export default function Courses() {
 
       if (error) throw error;
 
+      // ล้างฟอร์ม
       setTapeTitle('');
       setTapeDuration('');
       setTapeVideoId('');
       setUploadedMaterials([]);
-      alert("เพิ่มเทปเรียนใหม่สำเร็จ!");
+      const fileInput = document.getElementById('materials-upload-input');
+      if (fileInput) fileInput.value = '';
+
+      // อัปเดต UI ทันทีไม่ต้องรอลุ้นสัญญาณเน็ตเวิร์กหมุนวนกลับมา
+      await fetchCourses();
+      alert("🎉 เพิ่มเทปเรียนและอัปโหลดไฟล์งานเข้าสู่ระบบคลาวด์สำเร็จ!");
     } catch (err) {
-      alert(`ล้มเหลว: ${err.message}\n💡 แนะนำให้ตรวจสอบสิทธิ์ RLS Policy (สิทธิ์การ Update ตาราง courses) บน Supabase ด้วยครับ`);
+      alert(`ล้มเหลว: ${err.message}`);
     } finally {
       setActionLoading(false);
     }
   };
 
-  // 3.2 ฟังก์ชันสลับการซ่อน/แสดงคอร์ส
+  // 3.2 [ปรับปรุงใหม่ ⚡] สลับการซ่อน/แสดงคอร์สเรียน (แก้บั๊กไอคอนรูปตาไม่ยอมเปลี่ยนสถานะ)
   const toggleCourseVisibility = async (courseId, currentStatus) => {
-    const { error } = await supabase
-      .from('courses')
-      .update({ is_hidden: !currentStatus })
-      .eq('id', courseId);
+    try {
+      const { error } = await supabase
+        .from('courses')
+        .update({ is_hidden: !currentStatus })
+        .eq('id', courseId);
 
-    if (error) alert("ล้มเหลว: " + error.message);
+      if (error) throw error;
+      
+      // ดึงข้อมูลใหม่มาทับสเตททันที ไอคอนตาจะเปลี่ยนสถานะทันทีแบบติดสปีด
+      await fetchCourses();
+    } catch (err) {
+      alert("ล้มเหลว: " + err.message);
+    }
   };
 
-  // 3.3 ฟังก์ชันลบเทปเรียนออกจากคอร์ส
+  // 3.3 [ปรับปรุงใหม่ ⚡] ฟังก์ชันลบเทปเรียนออกจากคอร์ส
   const handleDeleteLecture = async (courseId, lectureId) => {
     if (!window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบเทปเรียนนี้?")) return;
 
-    const targetCourse = courses.find(c => c.id === courseId);
-    if (!targetCourse) return;
+    try {
+      const targetCourse = courses.find(c => c.id === courseId);
+      if (!targetCourse) return;
 
-    const filteredLectures = targetCourse.lectures.filter(l => l.id !== lectureId);
+      const filteredLectures = targetCourse.lectures.filter(l => l.id !== lectureId);
 
-    const { error } = await supabase
-      .from('courses')
-      .update({ lectures: filteredLectures })
-      .eq('id', courseId);
+      const { error } = await supabase
+        .from('courses')
+        .update({ lectures: filteredLectures })
+        .eq('id', courseId);
 
-    if (error) alert("ไม่สามารถลบได้: " + error.message);
+      if (error) throw error;
+      
+      await fetchCourses();
+    } catch (err) {
+      alert("ไม่สามารถลบได้: " + err.message);
+    }
   };
 
-  // 3.4 🔥 [อัปเดตใหม่] ฟังก์ชันสร้างคอร์สใหม่ + อัปโหลดรูปภาพปกจากในเครื่อง
+  // 3.4 ฟังก์ชันสร้างคอร์สใหม่ + อัปโหลดรูปภาพปกจากในเครื่อง
   const handleCreateCourseSubmit = async (e) => {
     e.preventDefault();
     if (!newCourseId || !newCourseTitle) {
@@ -183,27 +226,20 @@ export default function Courses() {
     }
 
     setActionLoading(true);
-
     try {
-      // 1. ตั้งค่ารูปภาพเริ่มต้นเผื่อผู้ใช้ไม่ได้อัปโหลดภาพขึ้นมา
       let finalImageUrl = "https://images.unsplash.com/photo-1515879218367-8466d910aaa4?q=80&w=600&auto=format&fit=crop";
 
-      // 2. ถ้ามีการเลือกไฟล์ภาพจากเครื่อง ให้ทำการอัปโหลดเข้า Supabase Storage ก่อน
       if (courseCoverFile) {
         const fileExt = courseCoverFile.name.split('.').pop();
         const fileName = `${newCourseId}-${Date.now()}.${fileExt}`;
         const filePath = `covers/${fileName}`;
 
-        // ยิงไฟล์ขึ้น Storage Bucket ชื่อ 'course-assets'
-        const { data: storageData, error: storageError } = await supabase.storage
+        const { error: storageError } = await supabase.storage
           .from('course-assets')
           .upload(filePath, courseCoverFile);
 
-        if (storageError) {
-          throw new Error(`ปัญหาด้าน Storage: ${storageError.message} (กรุณาเช็คว่าสร้าง Bucket ชื่อ 'course-assets' บนระบบหลังบ้านหรือยัง)`);
-        }
+        if (storageError) throw storageError;
 
-        // ดึง Public URL ของรูปภาพเพื่อไปเซฟลงในตารางหลัก
         const { data: urlData } = supabase.storage
           .from('course-assets')
           .getPublicUrl(filePath);
@@ -211,7 +247,6 @@ export default function Courses() {
         finalImageUrl = urlData.publicUrl;
       }
 
-      // 3. เขียนคำสั่งบันทึกลงฐานข้อมูล SQL (ตาราง courses)
       const { error: dbError } = await supabase
         .from('courses')
         .insert([{
@@ -227,20 +262,18 @@ export default function Courses() {
 
       if (dbError) throw dbError;
 
-      // ล้างค่าฟอร์มทั้งหมดเมื่อทำสำเร็จ
       setNewCourseId('');
       setNewCourseTitle('');
       setNewCourseDesc('');
       setCourseCoverFile(null);
       
-      // รีเซ็ตหน้าต่าง Input File ด้วยวิธีเคลียร์ค่า HTML element
       const fileInput = document.getElementById('cover-upload-input');
       if (fileInput) fileInput.value = '';
 
+      await fetchCourses();
       alert("🎉 สร้างคอร์สเรียนใหม่และอัปโหลดรูปภาพหน้าปกสำเร็จ!");
     } catch (err) {
-      console.error(err);
-      alert(`❌ ไม่สามารถสร้างคอร์สได้เนื่องจาก:\n${err.message}\n\n💡 คำแนะนำข้อผิดพลาด: หากขึ้นเกี่ยวกับพาสเวิร์ด/สิทธิ์ ให้ไปเช็คหน้าตาราง Supabase ว่าได้เปิดสิทธิ์ RLS Policy ตาราง courses สำหรับเปิดสิทธิ์แอดมิน INSERT หรือยังครับ`);
+      alert(`❌ ไม่สามารถสร้างคอร์สได้เนื่องจาก: ${err.message}`);
     } finally {
       setActionLoading(false);
     }
@@ -398,6 +431,8 @@ export default function Courses() {
                               <a
                                 key={mIdx}
                                 href={mat.data}
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="flex items-center justify-between text-[11px] p-2 rounded-lg bg-slate-50 dark:bg-zinc-950 border text-slate-600 dark:text-zinc-400 hover:bg-amber-500 hover:text-slate-950 dark:hover:bg-amber-500 dark:hover:text-slate-950 transition-colors font-medium"
                               >
                                 <span className="flex items-center gap-1.5 truncate pr-2">
@@ -501,7 +536,7 @@ export default function Courses() {
             </div>
             <div>
               <h2 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-wider">แผงควบคุมระบบการศึกษา (Real-time Creator Studio)</h2>
-              <p className="text-xs text-slate-400 mt-0.5">การบันทึกข้อมูลจะถูกซิงค์เพื่อกระจายสัญญาณภาพไปยังหน้าจอ iPad และเบราว์เซอร์อื่นทันทีโดยไม่ต้อง Deploy ใหม่</p>
+              <p className="text-xs text-slate-400 mt-0.5">การบันทึกข้อมูลถูกตั้งค่าให้อัปเดตเข้า State ทันที และกระจายสัญญาณแบบ Real-time ไปยังเบราว์เซอร์อื่นคู่ขนานกัน</p>
             </div>
           </div>
 
@@ -553,13 +588,14 @@ export default function Courses() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-1"><Upload className="w-2.5 h-2.5"/> เลือกเอกสารประกอบการเรียน (PDF/Handout)</label>
+                <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-1"><Upload className="w-2.5 h-2.5"/> เลือกเอกสารประกอบการเรียนจากในเครื่อง (PDF/Handouts)</label>
                 <input 
+                  id="materials-upload-input"
                   type="file" multiple onChange={handleMaterialsUpload}
                   className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200 cursor-pointer"
                 />
                 {uploadedMaterials.length > 0 && (
-                  <p className="text-[10px] text-emerald-600 mt-1 font-semibold">พบความจำนงส่งต่อ {uploadedMaterials.length} ไฟล์ เข้าคลาวด์</p>
+                  <p className="text-[10px] text-emerald-600 mt-1 font-semibold">📬 เลือกชีทเตรียมอัปโหลดแล้ว {uploadedMaterials.length} ไฟล์</p>
                 )}
               </div>
 
@@ -568,7 +604,7 @@ export default function Courses() {
                 disabled={actionLoading}
                 className="w-full flex items-center justify-center gap-1 px-4 py-2 bg-amber-500 disabled:bg-slate-300 disabled:cursor-not-allowed text-slate-950 font-bold rounded-xl text-xs hover:bg-amber-400 transition-colors shadow-sm"
               >
-                {actionLoading ? "กำลังบันทึกข้อมูล..." : <><Plus className="w-3.5 h-3.5 stroke-[3]" /> Add Tape & Upload Resources</>}
+                {actionLoading ? "กำลังอัปโหลดไฟล์เอกสารเข้า Storage..." : <><Plus className="w-3.5 h-3.5 stroke-[3]" /> Add Tape & Upload Resources</>}
               </button>
             </form>
 
@@ -612,7 +648,6 @@ export default function Courses() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* 📂 ปรับปรุงใหม่: เปลี่ยนอินพุต URL สตริงข้อความ เป็นกล่องอัปโหลดรูปภาพโดยตรงจากเครื่องคอมพิวเตอร์ */}
                 <div>
                   <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-1">
                     <ImageIcon className="w-3 h-3 text-amber-500" /> เลือกไฟล์ภาพปกคอร์สจากเครื่อง
