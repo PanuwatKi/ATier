@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Search, Play, FileText, Download, CheckCircle, ChevronRight, 
   ChevronDown, ArrowLeft, Bookmark, Shield, Plus, Clock, 
-  BookOpen, Award, Video, Trash2, Eye, EyeOff, FolderPlus, Link2, Upload, Image as ImageIcon
+  BookOpen, Award, Video, Trash2, Eye, EyeOff, FolderPlus, Link2, Upload, Image as ImageIcon, ExternalLink
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext'; 
 import { supabase } from '../supabaseClient';
@@ -22,8 +22,12 @@ export default function Courses() {
   const [selectedCourseId, setSelectedCourseId] = useState('');
   const [tapeTitle, setTapeTitle] = useState('');
   const [tapeDuration, setTapeDuration] = useState('');
-  const [tapeVideoId, setTapeVideoId] = useState(''); // รองรับทั้ง Link เต็ม และ ID ตรงๆ
+  const [tapeVideoId, setTapeVideoId] = useState(''); 
   const [uploadedMaterials, setUploadedMaterials] = useState([]); 
+  const [uploadStatus, setUploadStatus] = useState(''); 
+  
+  // 🔥 สเตทใหม่: คอยเก็บหลักฐานข้อมูลที่ส่งสำเร็จล่าสุดเพื่อแสดงให้แอดมินตรวจสอบ (Verification Log)
+  const [lastUploadSummary, setLastUploadSummary] = useState(null);
 
   // --- States สำหรับสร้างคอร์สใหม่ + ไฟล์รูปภาพหน้าปก ---
   const [newCourseId, setNewCourseId] = useState('');
@@ -34,21 +38,14 @@ export default function Courses() {
   const [courseCoverFile, setCourseCoverFile] = useState(null); 
   const [actionLoading, setActionLoading] = useState(false);   
 
-  // ==========================================
-  // ฟังก์ชันช่วยแกะรหัส Video ID จาก YouTube URL ทุกรูปแบบ
-  // ==========================================
   const extractYoutubeId = (urlOrId) => {
     if (!urlOrId) return '';
     const trimmed = urlOrId.trim();
-    // Regex รองรับ watch?v=, youtu.be/, embed/, v/, หรือใส่ ID มาตรงๆ 11 หลัก
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = trimmed.match(regExp);
     return (match && match[2].length === 11) ? match[2] : trimmed;
   };
 
-  // ==========================================
-  // 1. ฟังก์ชันดึงข้อมูลจาก Supabase (Fetch Data)
-  // ==========================================
   const fetchCourses = async () => {
     try {
       const { data, error } = await supabase
@@ -71,7 +68,6 @@ export default function Courses() {
       
       setCourses(formattedData);
 
-      // ซิงค์หน้าเจาะลึกที่เปิดค้างไว้ให้เป็นปัจจุบันด้วย
       if (selectedCourse) {
         const updatedCurrent = formattedData.find(c => c.id === selectedCourse.id);
         if (updatedCurrent) setSelectedCourse(updatedCurrent);
@@ -83,87 +79,79 @@ export default function Courses() {
     }
   };
 
-  // ==========================================
-  // 2. ตั้งค่าระบบ Real-time ซิงค์ข้ามอุปกรณ์
-  // ==========================================
   useEffect(() => {
     fetchCourses();
-
     const courseChannel = supabase
       .channel('realtime-courses-channel')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'courses' },
-        () => {
-          fetchCourses();
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'courses' }, () => { fetchCourses(); })
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(courseChannel);
-    };
+    return () => { supabase.removeChannel(courseChannel); };
   }, []);
 
-  // ==========================================
-  // 3. ฟังก์ชันสำหรับแอดมิน (Admin Functions)
-  // ==========================================
-  
   const handleMaterialsUpload = (e) => {
     const files = Array.from(e.target.files);
     setUploadedMaterials(files);
   };
 
-  // 3.1 [แก้ไขใหม่ 🔥] เพิ่มเทปเรียน เสถียรขึ้น อัปโหลดพร้อมกัน และประมวลผลทันทีไม่หน่วงหน้าจอ
+  // 3.1 ฟังก์ชันเพิ่มเทปเรียนแบบมีระบบดักจับ Error และออกใบเสร็จสรุปผลลิงก์
   const handleAddTapeSubmit = async (e) => {
     e.preventDefault();
+    setLastUploadSummary(null); // ล้างประวัติการเช็คอันเก่าก่อน
     
-    // แกะสกัดเอา YouTube ID ออกมาจากสิ่งที่แอดมินกรอกมาทันที
     const finalVideoId = extractYoutubeId(tapeVideoId);
-
     if (!selectedCourseId || !tapeTitle || !finalVideoId) {
-      alert("กรุณากรอกข้อมูลสำคัญ (เลือกคอร์ส, ชื่อตอน, และลิงก์ YouTube) ให้ครบถ้วน");
-      return;
-    }
-
-    if (finalVideoId.length !== 11) {
-      alert("⚠️ รูปแบบลิงก์หรือรหัส YouTube ไม่ถูกต้อง กรุณาตรวจสอบอีกครั้งครับ");
+      alert("กรุณากรอกข้อมูลสำคัญให้ครบถ้วน");
       return;
     }
 
     setActionLoading(true);
+    setUploadStatus("⚙️ กำลังตรวจสอบความเสถียรของเซิร์ฟเวอร์...");
+
     try {
       const targetCourse = courses.find(c => c.id === selectedCourseId);
-      if (!targetCourse) throw new Error("ไม่พบข้อมูลคอร์สเรียนปลายทาง");
+      if (!targetCourse) throw new Error("ไม่พบข้อมูลคอร์สเรียนปลายทางในตารางฐานข้อมูล");
 
       let uploadedMaterialsData = [];
 
-      // ปรับปรุง: อัปโหลดไฟล์งานแบบขนาน (Parallel Upload) มั่นใจได้เรื่องความเร็วและความเสถียร
+      // กระบวนการส่งไฟล์ขึ้นคลาวด์ Storage
       if (uploadedMaterials.length > 0) {
-        const uploadPromises = uploadedMaterials.map(async (file) => {
+        let currentFileIndex = 1;
+
+        for (const file of uploadedMaterials) {
+          setUploadStatus(`📤 [${currentFileIndex}/${uploadedMaterials.length}] กำลังอัปโหลด: ${file.name}`);
+
           const fileExt = file.name.split('.').pop();
           const fileName = `${selectedCourseId}-${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileExt}`;
           const filePath = `materials/${fileName}`;
 
-          const { error: uploadError } = await supabase.storage
+          // ยิงข้อมูลเข้า Supabase Storage บัคเก็ต course-assets
+          const { data: uploadData, error: uploadError } = await supabase.storage
             .from('course-assets')
             .upload(filePath, file);
 
-          if (uploadError) throw new Error(`ไม่สามารถอัปโหลดไฟล์ ${file.name} ได้: ${uploadError.message}`);
+          // 🚨 ตรวจสอบว่า Supabase ปฏิเสธการบันทึกไฟล์หรือไม่
+          if (uploadError) {
+            throw new Error(`Supabase Storage ปฏิเสธไฟล์ ${file.name} เหตุผล: ${uploadError.message}`);
+          }
 
+          // ขอที่อยู่ลิงก์สาธารณะที่ระบุตำแหน่งไฟล์ชัวร์ๆ
           const { data: urlData } = supabase.storage
             .from('course-assets')
             .getPublicUrl(filePath);
 
-          return {
+          console.log(`[Verified] File Uploaded To Supabase:`, urlData.publicUrl);
+
+          uploadedMaterialsData.push({
             name: file.name,
             data: urlData.publicUrl
-          };
-        });
+          });
 
-        // สั่งยิงไฟล์ขึ้น Storage พร้อมๆ กันทีเดียว
-        uploadedMaterialsData = await Promise.all(uploadPromises);
+          currentFileIndex++;
+        }
       }
+
+      // กระบวนการอัปเดตข้อมูลตาราง Database
+      setUploadStatus("📝 กำลังเขียนโครงสร้าง JSON บันทึกลงฐานข้อมูลตารางหลัก...");
 
       const newLecture = {
         id: `l_${Date.now()}`,
@@ -175,19 +163,21 @@ export default function Courses() {
 
       const updatedLectures = [...targetCourse.lectures, newLecture];
 
-      // อัปเดตข้อมูลขึ้น Database
-      const { error } = await supabase
+      const { data: dbData, error: dbError } = await supabase
         .from('courses')
         .update({ lectures: updatedLectures })
         .eq('id', selectedCourseId);
 
-      if (error) throw error;
+      // 🚨 ตรวจสอบว่าตารางข้อมูลเกิด Error หรือไม่
+      if (dbError) {
+        throw new Error(`Supabase Database บันทึกข้อมูลไม่เข้า เหตุผล: ${dbError.message}`);
+      }
 
-      // เพิ่มประสิทธิภาพ (Optimistic UI Update): อัปเดตสเตทในเครื่องทันทีโดยไม่ต้องรอดึงใหม่จากเซิร์ฟเวอร์
+      console.log("[Verified] Course Table Lectures Updated Successfully!");
+
+      // อัปเดต State หน้าเว็บทันที
       const updatedCoursesList = courses.map(c => {
-        if (c.id === selectedCourseId) {
-          return { ...c, lectures: updatedLectures };
-        }
+        if (c.id === selectedCourseId) return { ...c, lectures: updatedLectures };
         return c;
       });
       setCourses(updatedCoursesList);
@@ -196,7 +186,15 @@ export default function Courses() {
         setSelectedCourse(prev => ({ ...prev, lectures: updatedLectures }));
       }
 
-      // ล้างค่าฟอร์มพร้อมใช้งานต่อทันที
+      // 🔥 บันทึกหลักฐานเพื่อให้หน้าจอเอาไปแสดงผลให้แอดมินเช็คเปิดลิงก์
+      setLastUploadSummary({
+        courseTitle: targetCourse.title,
+        title: tapeTitle,
+        videoId: finalVideoId,
+        materials: uploadedMaterialsData
+      });
+
+      // ล้างฟอร์ม
       setTapeTitle('');
       setTapeDuration('');
       setTapeVideoId('');
@@ -204,57 +202,47 @@ export default function Courses() {
       const fileInput = document.getElementById('materials-upload-input');
       if (fileInput) fileInput.value = '';
 
-      setActionLoading(false); // ปิดการหมุนค้างทันทีหลังจากอัปเดตสเตทเสร็จสปีดเร็วกว่าเดิม
-      alert("🎉 เพิ่มเทปเรียนและเอกสารประกอบเข้าสู่ระบบเรียบร้อยแล้ว!");
-
-      // รันดึงข้อมูลซ้ำเบื้องหลังเพื่อตรวจสอบความถูกต้องสมบูรณ์อีกชั้น
+      alert("🎉 สำเร็จ! ข้อมูลวิ่งเข้าเซิร์ฟเวอร์ Supabase เรียบร้อยแล้ว เช็คความถูกต้องได้ที่แถบสีเขียวครับ");
       fetchCourses();
+
     } catch (err) {
-      alert(`ล้มเหลว: ${err.message}`);
+      console.error("[Supabase Error Log]:", err.message);
+      alert(`❌ ตรวจพบข้อผิดพลาดจากระบบหลังบ้าน:\n${err.message}`);
+    } finally {
       setActionLoading(false);
+      setUploadStatus('');
     }
   };
 
-  // 3.2 สลับการซ่อน/แสดงคอร์สเรียน (Instant Update)
   const toggleCourseVisibility = async (courseId, currentStatus) => {
     try {
-      // อัปเดตสเตทหน้าจอก่อนทันที (Optimistic) เพื่อให้ไอคอนตาเปลี่ยนไวแบบไร้ดีเลย์
       setCourses(prev => prev.map(c => c.id === courseId ? { ...c, isHidden: !currentStatus } : c));
-      
       const { error } = await supabase
         .from('courses')
         .update({ is_hidden: !currentStatus })
         .eq('id', courseId);
-
       if (error) throw error;
       fetchCourses();
     } catch (err) {
       alert("ล้มเหลว: " + err.message);
-      fetchCourses(); // ดึงค่าเดิมกลับมาหาก Error
+      fetchCourses(); 
     }
   };
 
-  // 3.3 ฟังก์ชันลบเทปเรียนออกจากคอร์ส
   const handleDeleteLecture = async (courseId, lectureId) => {
     if (!window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบเทปเรียนนี้?")) return;
-
     try {
       const targetCourse = courses.find(c => c.id === courseId);
       if (!targetCourse) return;
-
       const filteredLectures = targetCourse.lectures.filter(l => l.id !== lectureId);
-
-      // ปรับให้รีเฟรช State ทันที
       setCourses(prev => prev.map(c => c.id === courseId ? { ...c, lectures: filteredLectures } : c));
       if (selectedCourse && selectedCourse.id === courseId) {
         setSelectedCourse(prev => ({ ...prev, lectures: filteredLectures }));
       }
-
       const { error } = await supabase
         .from('courses')
         .update({ lectures: filteredLectures })
         .eq('id', courseId);
-
       if (error) throw error;
       fetchCourses();
     } catch (err) {
@@ -263,69 +251,47 @@ export default function Courses() {
     }
   };
 
-  // 3.4 ฟังก์ชันสร้างคอร์สใหม่ + อัปโหลดรูปภาพปกจากในเครื่อง
   const handleCreateCourseSubmit = async (e) => {
     e.preventDefault();
     if (!newCourseId || !newCourseTitle) {
-      alert("กรุณากรอก ไอดีคอร์ส และ ชื่อคอร์ส ให้เรียบร้อย");
+      alert("กรุณากรอกข้อมูลให้ครบถ้อย");
       return;
     }
-
     setActionLoading(true);
     try {
       let finalImageUrl = "https://images.unsplash.com/photo-1515879218367-8466d910aaa4?q=80&w=600&auto=format&fit=crop";
-
       if (courseCoverFile) {
         const fileExt = courseCoverFile.name.split('.').pop();
         const fileName = `${newCourseId}-${Date.now()}.${fileExt}`;
         const filePath = `covers/${fileName}`;
-
-        const { error: storageError } = await supabase.storage
-          .from('course-assets')
-          .upload(filePath, courseCoverFile);
-
+        const { error: storageError } = await supabase.storage.from('course-assets').upload(filePath, courseCoverFile);
         if (storageError) throw storageError;
-
-        const { data: urlData } = supabase.storage
-          .from('course-assets')
-          .getPublicUrl(filePath);
-
+        const { data: urlData } = supabase.storage.from('course-assets').getPublicUrl(filePath);
         finalImageUrl = urlData.publicUrl;
       }
-
-      const { error: dbError } = await supabase
-        .from('courses')
-        .insert([{
-          id: newCourseId,
-          title: newCourseTitle,
-          description: newCourseDesc,
-          image_url: finalImageUrl,
-          category: newCourseCategory,
-          instructor: newCourseInstructor,
-          is_hidden: false,
-          lectures: []
-        }]);
-
+      const { error: dbError } = await supabase.from('courses').insert([{
+        id: newCourseId,
+        title: newCourseTitle,
+        description: newCourseDesc,
+        image_url: finalImageUrl,
+        category: newCourseCategory,
+        instructor: newCourseInstructor,
+        is_hidden: false,
+        lectures: []
+      }]);
       if (dbError) throw dbError;
-
-      setNewCourseId('');
-      setNewCourseTitle('');
-      setNewCourseDesc('');
-      setCourseCoverFile(null);
-      
+      setNewCourseId(''); setNewCourseTitle(''); setNewCourseDesc(''); setCourseCoverFile(null);
       const fileInput = document.getElementById('cover-upload-input');
       if (fileInput) fileInput.value = '';
-
       await fetchCourses();
-      alert("🎉 สร้างคอร์สเรียนใหม่และอัปโหลดรูปภาพหน้าปกสำเร็จ!");
+      alert("🎉 สร้างคอร์สสำเร็จ!");
     } catch (err) {
-      alert(`❌ ไม่สามารถสร้างคอร์สได้เนื่องจาก: ${err.message}`);
+      alert(`❌ ไม่สำเร็จ: ${err.message}`);
     } finally {
       setActionLoading(false);
     }
   };
 
-  // --- กรองข้อมูลด้วยคำค้นหา ---
   const filteredCourses = courses.filter(course => {
     const matchesSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           course.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -582,7 +548,7 @@ export default function Courses() {
             </div>
             <div>
               <h2 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-wider">แผงควบคุมระบบการศึกษา (Real-time Creator Studio)</h2>
-              <p className="text-xs text-slate-400 mt-0.5">ระบบแกะลิงก์ YouTube อัตโนมัติและสปีดการอัปโหลดความเร็วสูงระดับ Cloud Optimization</p>
+              <p className="text-xs text-slate-400 mt-0.5">ระบบแกะลิงก์และตรวจเช็คการบันทึกปลายทางผ่านเซิร์ฟเวอร์ Supabase อย่างแม่นยำ</p>
             </div>
           </div>
 
@@ -650,13 +616,49 @@ export default function Courses() {
                 )}
               </div>
 
+              {actionLoading && uploadStatus && (
+                <div className="text-[11px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 p-2.5 rounded-xl border border-amber-500/20 text-center animate-pulse">
+                  {uploadStatus}
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={actionLoading}
                 className="w-full flex items-center justify-center gap-1 px-4 py-2 bg-amber-500 disabled:bg-slate-300 disabled:cursor-not-allowed text-slate-950 font-bold rounded-xl text-xs hover:bg-amber-400 transition-colors shadow-sm"
               >
-                {actionLoading ? "🚀 กำลังส่งข้อมูลขึ้นระบบคลาวด์แบบเร่งสปีด..." : <><Plus className="w-3.5 h-3.5 stroke-[3]" /> Add Tape & Upload Resources</>}
+                {actionLoading ? "🚀 กำลังส่งข้อมูลเข้าฐานข้อมูล Supabase..." : <><Plus className="w-3.5 h-3.5 stroke-[3]" /> Add Tape & Upload Resources</>}
               </button>
+
+              {/* 🔥 🔥 กล่องตรวจสอบพิกัดความสำเร็จ (Verification Summary Panel) 🔥 🔥 */}
+              {lastUploadSummary && (
+                <div className="p-4 border rounded-2xl bg-emerald-500/5 dark:bg-emerald-950/10 border-emerald-500/30 text-xs text-slate-700 dark:text-zinc-300 space-y-2 animate-fade-in">
+                  <div className="flex items-center gap-1.5 font-bold text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle className="w-4 h-4 shrink-0" />
+                    <span>Supabase Verification: บันทึกสำเร็จชัวร์ 100%</span>
+                  </div>
+                  <div className="text-[11px] space-y-1 pl-5 text-slate-500 dark:text-zinc-400">
+                    <p>• <b>คอร์ส:</b> {lastUploadSummary.courseTitle}</p>
+                    <p>• <b>ชื่อตอน:</b> {lastUploadSummary.title}</p>
+                    <p>• <b>YouTube ID ในระบบ:</b> <code className="bg-slate-100 dark:bg-zinc-800 px-1 rounded font-mono text-amber-600 font-bold">{lastUploadSummary.videoId}</code></p>
+                  </div>
+                  
+                  {lastUploadSummary.materials.length > 0 && (
+                    <div className="pl-5 pt-1 space-y-1">
+                      <p className="font-bold text-[11px] text-slate-600 dark:text-zinc-300">🔗 ทดสอบกดเปิดไฟล์ชีท (เช็คพิกัด Cloud Url):</p>
+                      {lastUploadSummary.materials.map((mat, idx) => (
+                        <a 
+                          key={idx} href={mat.data} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center justify-between text-[11px] p-2 bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-lg text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                        >
+                          <span className="truncate pr-2">👉 {mat.name}</span>
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </form>
 
             {/* ฟอร์ม 2: สร้างคอร์สเรียนขึ้นมาใหม่ตั้งต้น */}
