@@ -4,9 +4,8 @@ import {
   ChevronDown, ArrowLeft, Bookmark, Shield, Plus, Clock, 
   BookOpen, Award, Video, Trash2, Eye, EyeOff, FolderPlus, Link2, Upload
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext'; // เพิ่มการ Import ระบบดึงสิทธิ์จาก Supabase
+import { useAuth } from '../context/AuthContext'; 
 
-// โครงสร้างข้อมูลเริ่มต้นจำลองสไตล์กวดวิชาชั้นนำ
 const INITIAL_COURSES = [
   {
     id: "toi-mastery",
@@ -26,13 +25,12 @@ const INITIAL_COURSES = [
 export default function Courses() {
   // --- SUPABASE ROLE & AUTHORIZATION CENTRAL SYSTEM ---
   const { user, role } = useAuth(); 
-  const [isAdminModeActive, setIsAdminModeActive] = useState(false); // ควบคุมการสลับโหมดเปิด/ปิดหน้าหลังบ้าน
+  const [isAdminModeActive, setIsAdminModeActive] = useState(false); 
 
-  // เช็คระดับความปลอดภัยจาก Database Role โดยตรง
-  const isAdminUser = role === 'admin' || role === 'super_admin';
-  const isSuperAdmin = role === 'super_admin';
+  // เช็คระดับสิทธิ์จาก Database และ Enum ของ Supabase (สอดคล้องกับภาพที่ 3 ตัวพิมพ์เล็ก/ใหญ่ต้องตรงกัน)
+  // หมายเหตุ: ในภาพที่ 3 ค่าที่บันทึกคือ 'Admin' และ 'Super Admin' (ตัวแรกเป็นพิมพ์ใหญ่) 
+  const isAdminUser = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin';
 
-  // ระบบป้องกันสิทธิ์หลุด: ปิดโหมดแอดมินทันทีหากไม่ได้ล็อกอินหรือไม่มีสิทธิ์
   useEffect(() => {
     if (!isAdminUser) {
       setIsAdminModeActive(false);
@@ -63,12 +61,10 @@ export default function Courses() {
   const [mockTime, setMockTime] = useState("00:00:00");
   const [activeCheckpointMsg, setActiveCheckpointMsg] = useState("");
 
-  // --- ADMIN FORM INPUT STATES ---
   const [newCourse, setNewCourse] = useState({ title: '', category: '', instructor: '', imageUrl: '', description: '' });
   const [newTape, setNewTape] = useState({ title: '', duration: '1h 30m', videoUrl: '' });
   const [uploadedMaterials, setUploadedMaterials] = useState([]); 
 
-  // Sync state to local storage automatically when modified
   useEffect(() => {
     localStorage.setItem('atier_courses', JSON.stringify(courses));
   }, [courses]);
@@ -81,7 +77,6 @@ export default function Courses() {
     localStorage.setItem('atier_last_watched', JSON.stringify(lastWatchedTape));
   }, [lastWatchedTape]);
 
-  // --- SMART URL EXTRACTOR UTILITY ---
   const extractYouTubeId = (url) => {
     if (!url) return "dQw4w9WgXcQ"; 
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
@@ -89,7 +84,6 @@ export default function Courses() {
     return (match && match[2].length === 11) ? match[2] : url;
   };
 
-  // --- FILE UPLOAD HANDLERS ---
   const handleCoverImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -118,18 +112,14 @@ export default function Courses() {
     });
   };
 
-  // --- STUDENT APP NAVIGATION LOGIC ---
   const handleSelectCourse = (course) => {
     setSelectedCourse(course);
     setActiveCheckpointMsg("");
-
     const lastTapeId = lastWatchedTape[course.id];
     const savedLecture = course.lectures.find(l => l.id === lastTapeId);
     const targetLecture = savedLecture || course.lectures[0] || null;
-    
     setCurrentLecture(targetLecture);
     setExpandedLecture(targetLecture?.id || null);
-
     if (targetLecture && checkpoints[targetLecture.id]) {
       setActiveCheckpointMsg(`Resumed from your saved checkpoint at ${checkpoints[targetLecture.id]}`);
     }
@@ -138,9 +128,7 @@ export default function Courses() {
   const handleSelectLecture = (lecture) => {
     setCurrentLecture(lecture);
     setActiveCheckpointMsg("");
-    
     setLastWatchedTape(prev => ({ ...prev, [selectedCourse.id]: lecture.id }));
-
     if (checkpoints[lecture.id]) {
       setActiveCheckpointMsg(`Resumed from your saved checkpoint at ${checkpoints[lecture.id]}`);
     } else {
@@ -151,7 +139,6 @@ export default function Courses() {
   const toggleLectureCompletion = (lectureId, e, courseId) => {
     if (e) e.stopPropagation();
     setCompletedLectures(prev => ({ ...prev, [lectureId]: !prev[lectureId] }));
-
     if (courseId) {
       setLastWatchedTape(prev => ({ ...prev, [courseId]: lectureId }));
     }
@@ -170,10 +157,9 @@ export default function Courses() {
     setActiveCheckpointMsg(`Progress checkpoint saved securely at ${generatedTimestamp}!`);
   };
 
-  // --- BACKOFFICE ADMIN CONTROL PIPELINES (With Guard Clauses) ---
   const handleCreateCourse = (e) => {
     e.preventDefault();
-    if (!isAdminUser) return; // บล็อกความปลอดภัยหลังบ้าน
+    if (!isAdminUser) return; 
     if (!newCourse.title || !newCourse.description) return;
 
     const createdItem = {
@@ -248,7 +234,6 @@ export default function Courses() {
     setCourses(updatedCatalog);
     const refreshedCourse = updatedCatalog.find(c => c.id === selectedCourse.id);
     setSelectedCourse(refreshedCourse);
-    
     if (currentLecture?.id === tapeId) {
       setCurrentLecture(refreshedCourse.lectures[0] || null);
     }
@@ -257,8 +242,6 @@ export default function Courses() {
   const filteredCourses = courses.filter(course => {
     const matchSearch = course.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                         course.description.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    // ถ้าผู้ใช้มีสิทธิ์และกำลังสลับเปิดโหมด Control Active ให้เห็นโครงสร้างทั้งหมด (รวมวิชาที่ถูกซ่อนอยู่)
     if (isAdminUser && isAdminModeActive) return matchSearch; 
     return matchSearch && !course.isHidden; 
   });
@@ -266,7 +249,6 @@ export default function Courses() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-50 transition-colors duration-200">
       
-      {/* TOP CONTROL PLATFORM BAR */}
       <div className="max-w-7xl mx-auto px-4 pt-10 pb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200/60 dark:border-zinc-900/60">
         <div>
           <span className="text-xs font-bold tracking-widest text-blue-600 dark:text-blue-400 uppercase flex items-center gap-1.5">
@@ -275,7 +257,6 @@ export default function Courses() {
           <h1 className="text-3xl font-extrabold tracking-tight mt-1">OnDemand Portal Console</h1>
         </div>
 
-        {/* ปุ่มควบคุมเปลี่ยนโหมดแสดงผลสำหรับกลุ่มผู้ใช้ระดับสูง (Admin / Super Admin) */}
         {isAdminUser && (
           <button 
             onClick={() => setIsAdminModeActive(!isAdminModeActive)}
@@ -292,18 +273,13 @@ export default function Courses() {
       </div>
 
       {!selectedCourse ? (
-        
-        /* 1. MAIN SYSTEM DASHBOARD */
         <div className="max-w-7xl mx-auto px-4 py-10 space-y-8">
-          
-          {/* ADMIN: COURSE INJECTION ENGINE */}
           {isAdminUser && isAdminModeActive && (
             <div className="bg-white dark:bg-zinc-900 border border-amber-500/30 rounded-2xl p-6 shadow-xl space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-zinc-800">
                 <FolderPlus className="w-5 h-5 text-amber-500" />
                 <h2 className="text-base font-bold text-slate-800 dark:text-zinc-100 uppercase tracking-wide">Backoffice: Upload New Course Catalogue</h2>
               </div>
-              
               <form onSubmit={handleCreateCourse} className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="md:col-span-2 space-y-3">
                   <input 
@@ -326,7 +302,6 @@ export default function Courses() {
                       className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200 cursor-pointer"
                     />
                   </div>
-
                   <div className="grid grid-cols-2 gap-2">
                     <input 
                       type="text" placeholder="หมวดหมู่ (Category)" 
@@ -373,7 +348,6 @@ export default function Courses() {
                       <div className="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md">
                         {course.category}
                       </div>
-
                       {isAdminUser && isAdminModeActive && (
                         <div className="absolute top-3 right-3 flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                           <button 
@@ -393,7 +367,6 @@ export default function Courses() {
                         </div>
                       )}
                     </div>
-
                     <div className="p-5 space-y-2">
                       <div className="flex justify-between items-center">
                         <p className="text-xs font-semibold text-slate-400 dark:text-zinc-500">{course.instructor}</p>
@@ -407,7 +380,6 @@ export default function Courses() {
                       </p>
                     </div>
                   </div>
-
                   <div className="px-5 pb-5 pt-2 border-t border-slate-50 dark:border-zinc-800/60 space-y-2 bg-slate-50/50 dark:bg-zinc-900/30">
                     <div className="flex justify-between items-center text-xs">
                       <span className="text-slate-400 dark:text-zinc-500 flex items-center gap-1">
@@ -428,10 +400,7 @@ export default function Courses() {
           </div>
         </div>
       ) : (
-        
-        /* 2. ADVANCED TUTORING PLAYER MODULE SCREEN */
         <div className="max-w-7xl mx-auto px-4 py-8">
-          
           <button 
             onClick={() => setSelectedCourse(null)}
             className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white mb-6 bg-white dark:bg-zinc-900 px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-800 shadow-sm transition-all"
@@ -440,7 +409,6 @@ export default function Courses() {
           </button>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-            
             <div className="lg:col-span-2 space-y-4">
               <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black border border-slate-200 dark:border-zinc-800 shadow-xl group">
                 {currentLecture ? (
@@ -472,7 +440,6 @@ export default function Courses() {
                     <Clock className="w-3.5 h-3.5" /> ระยะเวลารันไทม์บันทึกเทปสอน: {currentLecture?.duration || "0h 00m"}
                   </p>
                 </div>
-
                 {currentLecture && (
                   <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
                     <button
@@ -482,7 +449,6 @@ export default function Courses() {
                       <Bookmark className="w-3.5 h-3.5 text-amber-500" />
                       <span>บันทึกชั่วโมงล่าสุด</span>
                     </button>
-
                     <button
                       onClick={() => toggleLectureCompletion(currentLecture.id, null, selectedCourse.id)}
                       className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl transition-all ${
@@ -538,7 +504,6 @@ export default function Courses() {
 
                     return (
                       <div key={lecture.id} className={`transition-colors ${isActive ? 'bg-blue-50/40 dark:bg-blue-950/10' : ''} ${isRecentWatched && !isActive ? 'border-l-2 border-dashed border-blue-500' : ''}`}>
-                        
                         <div 
                           onClick={() => {
                             handleSelectLecture(lecture);
@@ -553,7 +518,6 @@ export default function Courses() {
                             >
                               <CheckCircle className="w-5 h-5 fill-current bg-white dark:bg-zinc-900" />
                             </button>
-                            
                             <div className="overflow-hidden">
                               <p className={`text-sm font-bold truncate transition-colors ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-700 dark:text-zinc-300 group-hover/item:text-slate-900 dark:group-hover/item:text-white'}`}>
                                 {lecture.title}
@@ -564,7 +528,6 @@ export default function Courses() {
                               </div>
                             </div>
                           </div>
-
                           <div className="flex items-center gap-2 shrink-0">
                             {isAdminUser && isAdminModeActive && (
                               <button 
@@ -584,7 +547,6 @@ export default function Courses() {
                             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-zinc-500 flex items-center gap-1">
                               <FileText className="w-3 h-3 text-indigo-400" /> Attached Course Materials
                             </p>
-                            
                             <div className="space-y-1.5">
                               {lecture.materials && lecture.materials.length > 0 ? (
                                 lecture.materials.map((file, idx) => (
@@ -612,7 +574,6 @@ export default function Courses() {
                             </div>
                           </div>
                         )}
-
                       </div>
                     );
                   })
@@ -623,14 +584,12 @@ export default function Courses() {
                 )}
               </div>
 
-              {/* CONDITIONAL BACKOFFICE ACTIVE CONSOLE: ADD TAPE */}
               {isAdminUser && isAdminModeActive && (
                 <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-5 space-y-4">
                   <div className="flex items-center gap-2 pb-2 border-b border-amber-500/10">
                     <Video className="w-4 h-4 text-amber-500" />
                     <h4 className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Backoffice: Add Course Tape Record</h4>
                   </div>
-
                   <form onSubmit={handleAddTape} className="space-y-3">
                     <div>
                       <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1">หัวข้อบทเรียนประยุกต์สอน (Tape Title)</label>
@@ -640,7 +599,6 @@ export default function Courses() {
                         className="w-full px-3 py-1.5 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-amber-500"
                       />
                     </div>
-
                     <div className="grid grid-cols-3 gap-2">
                       <div className="col-span-2">
                         <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-0.5"><Link2 className="w-2.5 h-2.5" /> YouTube URL / ID</label>
@@ -659,7 +617,6 @@ export default function Courses() {
                         />
                       </div>
                     </div>
-
                     <div>
                       <label className="block text-[10px] font-bold uppercase text-slate-400 dark:text-zinc-500 mb-1 flex items-center gap-1"><Upload className="w-2.5 h-2.5"/> อัปโหลดชีท/เอกสารประกอบเทปเรียน</label>
                       <input 
@@ -671,7 +628,6 @@ export default function Courses() {
                         <p className="text-[10px] text-emerald-600 mt-1 font-semibold">เลือกแล้ว {uploadedMaterials.length} ไฟล์ พร้อมอัปโหลด</p>
                       )}
                     </div>
-
                     <button
                       type="submit"
                       className="w-full flex items-center justify-center gap-1 px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs hover:bg-amber-400 transition-colors shadow-sm"
@@ -681,13 +637,10 @@ export default function Courses() {
                   </form>
                 </div>
               )}
-
             </div>
           </div>
-
         </div>
       )}
-
     </div>
   );
 }

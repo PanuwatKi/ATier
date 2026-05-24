@@ -11,7 +11,7 @@ import {
   Eye, 
   EyeOff 
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext'; // ต้อง import useAuth
+import { useAuth } from '../context/AuthContext'; 
 
 const MOCK_MEMBERS = [
   { id: 1, name: "Panuwat Kiatteerarat", study: "Computer Engineer Student", university: "--", phone: "063-879-0083", ig: "@pnwiinn", line: "maibok", email: "in.klang2551@gmail.com" },
@@ -34,7 +34,7 @@ const MOCK_MEMBERS = [
 ];
 
 export default function Home() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
@@ -43,14 +43,21 @@ export default function Home() {
     phone: true, ig: true, line: true, email: true,
   });
 
-useEffect(() => {
-  const adminEmails = ['in.klang2551@gmail.com', 'example@gmail.com'];
-  if (user && adminEmails.includes(user.email)) {
-    setIsAdmin(true);
-  } else {
-    setIsAdmin(false);
-  }
-}, [user]);
+  useEffect(() => {
+    const adminEmails = ['in.klang2551@gmail.com', 'non.sakhong@gmail.com'];
+    
+    // ตรวจสอบสิทธิ์โดยอิงจากทั้ง Database Role และ Email Backup พร้อมกัน
+    const hasAdminRole = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin';
+    const hasAdminEmail = user && adminEmails.includes(user.email);
+
+    if (hasAdminRole || hasAdminEmail) {
+      setIsAdminUser(true);
+      setIsAdmin(true); // เปิดวิวมุมมองแอดมินเริ่มต้น
+    } else {
+      setIsAdminUser(false);
+      setIsAdmin(false);
+    }
+  }, [user, role]);
 
   const openModal = (member) => setSelectedMember(member);
   const closeModal = () => setSelectedMember(null);
