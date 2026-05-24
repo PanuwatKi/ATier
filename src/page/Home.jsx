@@ -56,15 +56,6 @@ export default function Home() {
       setIsAdmin(false);
     }
   }, [role]); // ทำงานซ้ำทุกครั้งเมื่อบทบาทในฐานข้อมูลเปลี่ยนไป
-  /*useEffect(() => {
-    console.log("========================================");
-    console.log("✨ ATier Auth Status Monitor ✨");
-    console.log("1. ข้อมูลยูสเซอร์ล็อกอิน (User Object):", user);
-    console.log("2. อีเมลผู้ใช้ (Email):", user?.email);
-    console.log("3. สิทธิ์ที่ส่งมาถึงหน้าบ้าน (Role จาก useAuth):", role);
-    console.log("4. สถานะการผ่านสิทธิ์แอดมิน (isAdminUser):", isAdminUser);
-    console.log("========================================");
-  }, [user, role, isAdminUser]);*/
 
   const openModal = (member) => setSelectedMember(member);
   const closeModal = () => setSelectedMember(null);
