@@ -34,6 +34,7 @@ const MOCK_MEMBERS = [
 ];
 
 export default function Home() {
+  // --- SECURE AUTHORIZATION STATES (Single Declaration) ---
   const { user, role } = useAuth();
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -44,20 +45,17 @@ export default function Home() {
   });
 
   useEffect(() => {
-    const adminEmails = ['in.klang2551@gmail.com', 'non.sakhong@gmail.com'];
-    
-    // ตรวจสอบสิทธิ์โดยอิงจากทั้ง Database Role และ Email Backup พร้อมกัน
+    // ดักฟังค่าสิทธิ์ที่เปลี่ยนมาจาก Supabase ใน Database เท่านั้น
     const hasAdminRole = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin';
-    const hasAdminEmail = user && adminEmails.includes(user.email);
 
-    if (hasAdminRole || hasAdminEmail) {
+    if (hasAdminRole) {
       setIsAdminUser(true);
-      setIsAdmin(true); // เปิดวิวมุมมองแอดมินเริ่มต้น
+      setIsAdmin(true); // เปิดวิวมุมมองหลังบ้านให้อัตโนมัติเมื่อตรวจสอบสิทธิ์ผ่าน
     } else {
       setIsAdminUser(false);
       setIsAdmin(false);
     }
-  }, [user, role]);
+  }, [role]); // ทำงานซ้ำทุกครั้งเมื่อบทบาทในฐานข้อมูลเปลี่ยนไป
 
   const openModal = (member) => setSelectedMember(member);
   const closeModal = () => setSelectedMember(null);
