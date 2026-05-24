@@ -59,9 +59,15 @@ export default function Courses() {
   }, [lastWatchedTape]);
 
   // 📥 ฟังก์ชันดึงข้อมูลจากฐานข้อมูล Supabase ตาราง courses
+  // 📥 ฟังก์ชันดึงข้อมูลจากฐานข้อมูล Supabase ตาราง courses (เวอร์ชันกัน Token ค้างและป้องกันค้างยาว)
   const fetchCourses = async () => {
     try {
       setLoading(true);
+
+      // 🔒 [แก้จุดค้าง] สั่งอัปเดต/ตรวจสอบ Session ปัจจุบันให้สดใหม่ก่อนดึงข้อมูลเสมอ 
+      // วิธีนี้จะช่วยล้าง Token ที่บูดหรือค้าง ป้องกันเบราว์เซอร์เอ๋อจนเกิด Timeout
+      await supabase.auth.getSession();
+
       const { data, error } = await supabase
         .from('courses')
         .select('*')
@@ -69,7 +75,7 @@ export default function Courses() {
       
       if (error) throw error;
 
-      // Map ข้อมูลให้อยู่ในรูปแบบ CamelCase สอดคล้องกับ UI เดิมของคุณ
+      // Map ข้อมูลให้อยู่ในรูปแบบ CamelCase สอดคล้องกับ UI เดิม
       const formatted = (data || []).map(c => ({
         id: c.id,
         title: c.title,
@@ -83,15 +89,16 @@ export default function Courses() {
 
       setCourses(formatted);
 
-      // ซิงค์หน้าเจาะลึกวิชาปัจจุบันหากเปิดค้างไว้
       if (selectedCourse) {
         const refreshedCurrent = formatted.find(c => c.id === selectedCourse.id);
         if (refreshedCurrent) setSelectedCourse(refreshedCurrent);
       }
     } catch (err) {
       console.error("Error fetching courses:", err.message);
+      // 💡 หากเน็ตเวิร์กค้างหรือมีปัญหา ให้แจ้งเตือนผู้ใช้แทนการปล่อยให้หมุนค้างตลอดกาล
+      alert("⚠️ การเชื่อมต่อข้อมูลกับคลาวด์ขัดข้องชั่วคราว กรุณากดรีเฟรชหน้าเว็บอีกครั้ง");
     } finally {
-      setLoading(false);
+      setLoading(false); // <--- ปลดล็อกหน้าจอ Loading เสมอไม่ว่าจะสำเร็จหรือพัง
     }
   };
 
