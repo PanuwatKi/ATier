@@ -5,17 +5,16 @@ import { useTheme } from '../context/ThemeContext';
 import { Sun, Moon, Menu, X, Shield, User, LogOut } from 'lucide-react';
 
 export default function Navbar() {
-  // เชื่อมต่อกับ AuthContext ที่เราแก้ชื่อฟังก์ชันเป็น logout ให้ตรงกันแล้ว
-  const { user, loading, loginWithGoogle, logout } = useAuth();
+  // 1. เพิ่มการดึงค่า role มาจาก useAuth() ตรงนี้เพื่อให้ตรงกับฐานข้อมูลจริง
+  const { user, loading, loginWithGoogle, logout, role } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
 
   const isActive = (path) => location.pathname === path;
 
-  // สมมติฐานเรื่อง Role: หากคุณยังไม่มีการดึง role มาจาก AuthContext 
-  // ให้ใช้ค่า Default ไปก่อน หรือดึงจาก metadata ถ้ามีครับ
-  const role = user?.user_metadata?.role || "User";
+  // 2. ปรับให้ดึงสิทธิ์จาก DB ก่อน ถ้าไม่มีค่อยไปดึงจาก metadata หรือ fallback เป็น "User"
+  const displayRole = role || user?.user_metadata?.role || "User";
 
   const navLinks = [
     { name: 'Home', path: '/' },
@@ -64,11 +63,13 @@ export default function Navbar() {
             ) : user ? (
               <div className="flex items-center space-x-3 bg-gray-50 dark:bg-gray-900/50 pl-3 pr-2 py-1 rounded-full border border-gray-200 dark:border-gray-800">
                 <div className="flex flex-col items-end">
+                  {/* 3. แก้ไขตรงนี้: ใส่ ?. ดักหลัง email ป้องกันการแครช และเผื่อ fallback ข้อความไว้ */}
                   <span className="text-xs font-semibold max-w-[100px] truncate">
-                    {user.user_metadata?.full_name || user.email.split('@')[0]}
+                    {user.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}
                   </span>
+                  {/* 4. เปลี่ยนมาแสดงผลด้วย displayRole ที่ดึงจากระบบฐานข้อมูลจริง */}
                   <span className="flex items-center text-[10px] font-bold text-emerald-500">
-                    <Shield size={10} className="mr-0.5" /> {role}
+                    <Shield size={10} className="mr-0.5" /> {displayRole}
                   </span>
                 </div>
                 {user.user_metadata?.avatar_url ? (
@@ -77,7 +78,7 @@ export default function Navbar() {
                   <div className="p-1.5 bg-blue-500 rounded-full text-white"><User size={16} /></div>
                 )}
                 <button
-                  onClick={logout} // เรียกฟังก์ชัน logout ที่ถูกต้อง
+                  onClick={logout}
                   className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                 >
                   <LogOut size={16} />
