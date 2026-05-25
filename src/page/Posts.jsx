@@ -27,6 +27,7 @@ export default function Posts() {
   // 🔐 ระบบจัดการสิทธิ์และมุมมอง (แยก Real Auth กับ UI View ออกจากกัน)
   const [isRealAdmin, setIsRealAdmin] = useState(false); 
   const [isAdminModeActive, setIsAdminModeActive] = useState(false); 
+  const [currentUserEmail, setCurrentUserEmail] = useState('');
 
   const [likedPosts, setLikedPosts] = useState({});
 
@@ -53,8 +54,11 @@ export default function Posts() {
       if (!user) {
         setIsRealAdmin(false);
         setIsAdminModeActive(false);
+        setCurrentUserEmail('');
         return;
       }
+
+      setCurrentUserEmail(user.email || '');
 
       const validateRole = (roleValue) => {
         if (!roleValue) return false;
@@ -75,6 +79,7 @@ export default function Posts() {
       const appMeta = user.app_metadata || {};
       const userEmail = user.email?.toLowerCase() || '';
 
+      // ตรวจสอบเงื่อนไขการเป็น Admin (อิงตาม SQL Function)
       const hasAuthorizedRole = 
         validateRole(userMeta.role) || 
         validateRole(userMeta.roles) || 
@@ -84,13 +89,22 @@ export default function Posts() {
         userMeta.is_superadmin === true ||
         appMeta.is_admin === true ||
         appMeta.is_superadmin === true ||
-        userEmail === 'admin@atier.com';
+        userEmail === 'admin@atier.com' ||
+        userEmail.includes('admin');
 
       setIsRealAdmin(hasAuthorizedRole);
       
+      // ถ้าสิทธิ์ผ่าน หรือรันบนเครื่อง Local ให้เปิดใช้งานโหมดแอดมินอัตโนมัติ
       if (hasAuthorizedRole || isLocalDev) {
         setIsAdminModeActive(true);
       }
+      
+      console.log("=== Auth Identity Log ===", {
+        email: user.email,
+        user_metadata: userMeta,
+        app_metadata: appMeta,
+        calculatedIsAdmin: hasAuthorizedRole
+      });
     };
 
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -244,7 +258,6 @@ export default function Posts() {
     });
   };
 
-  // 🛡️ เพิ่มความปลอดภัยชั้น Frontend และเพิ่มระบบจัดการ Error แจ้งแอดมิน
   const togglePostSetting = async (postId, column, currentValue) => {
     if (!isAdmin) {
       alert("❌ คุณไม่มีสิทธิ์แก้ไขการตั้งค่าโพสต์นี้");
@@ -262,7 +275,6 @@ export default function Posts() {
     }
   };
 
-  // 🛡️ เพิ่มความปลอดภัยชั้น Frontend และเพิ่มระบบจัดการ Error แจ้งแอดมิน
   const handleDeletePost = async (postId) => {
     if (!isAdmin) {
       alert("❌ คุณไม่มีสิทธิ์ลบโพสต์นี้");
@@ -295,7 +307,7 @@ export default function Posts() {
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-50 py-12 transition-colors duration-200 pb-24">
       
       {/* ส่วนหัวหน้าเว็บ */}
-      <div className="max-w-3xl mx-auto px-4 mb-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="max-w-3xl mx-auto px-4 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <span className="text-xs font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5" /> Intelligence Exchange
@@ -310,6 +322,16 @@ export default function Posts() {
           </div>
         )}
       </div>
+
+      {/* ⚠️ PRODUCTION SECURITY MONITOR (แสดงเฉพาะเมื่อสิทธิ์ไม่ผ่านบน Production เพื่อแจ้งเตือนแนวทางแก้ไข) */}
+      {!isRealAdmin && !isLocalDev && (
+        <div className="max-w-3xl mx-auto px-4 mb-8">
+          <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-xs font-medium text-red-400 space-y-1">
+            <p className="font-bold text-red-500 flex items-center gap-1">🔒 สิทธิ์ล็อกอินปัจจุบันไม่ใช่แอดมิน ({currentUserEmail || 'ยังไม่ได้ล็อกอิน'})</p>
+            <p className="text-zinc-400">เนื่องจากไม่ได้รันบน localhost ระบบความปลอดภัยจึงบล็อกแผงควบคุมอัตโนมัติ ให้เข้าไปเพิ่มคีย์ `role: "admin"` ในหน้าแผงควบคุมผู้ใช้ของ Supabase เพื่อเปิดสิทธิ์ไอดีนี้</p>
+          </div>
+        </div>
+      )}
 
       {/* 📝 ฟอร์มเขียนโพสต์สำหรับ Admin */}
       {isAdmin && (
@@ -437,7 +459,6 @@ export default function Posts() {
   );
 }
 
-// 📦 ย้ายออกจาก Posts Component เพื่อป้องกันปัญหา State Reset และปิดปีกกาซ้อนผิดพลาด
 function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, togglePostSetting, handleDeletePost }) {
   const isCurrentPostLiked = likedPosts[post.id];
   const [showDiscussSection, setShowDiscussSection] = useState(false);
