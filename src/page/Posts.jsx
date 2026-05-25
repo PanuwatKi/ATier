@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Heart, 
   Eye, 
@@ -10,117 +10,232 @@ import {
   Send, 
   MessageSquare,
   Sparkles,
-  Share2
+  Share2,
+  Paperclip,
+  Download,
+  ToggleLeft,
+  ToggleRight,
+  Trash2
 } from 'lucide-react';
-
-// Premium Initial Blog Feed Data
-const INITIAL_POSTS = [
-  {
-    id: 1,
-    title: "Overcoming the State Space: Advanced Bitmask DP Strategies for TOI",
-    summary: "A deep-dive technical blueprint explaining how to safely compress multi-dimensional tracking matrices into clean, low-overhead bitwise operations for Olympic-level informatics challenges.",
-    content: "When tackling NP-hard traveling salesman variants or resource allocation problems in competitive programming, standard multi-dimensional matrices quickly break memory bounds. Bitmasking provides an elegant out. By utilizing a single 32-bit integer, we can uniquely store the visited states of up to 32 distinct nodes. Combined with Memoization, this slashes exponential search states into deterministic polynomial execution frames. Our testing inside sandboxed competitive grading routines shows memory footprints dropping by up to 84% while maximizing CPU cache line hits.",
-    author: "Thanapat S.",
-    date: "May 18, 2026",
-    readingTime: "5 min read",
-    imageUrl: "https://images.unsplash.com/photo-1618401471353-b98afee0b2eb?q=80&w=800&auto=format&fit=crop",
-    tags: ["Algorithms", "TOI2026", "C++"],
-    likes: 142,
-    views: 1824
-  },
-  {
-    id: 2,
-    title: "Phytochemical Reduction Kinetics in Green Nanoparticle Synthesis",
-    summary: "Investigating the molecular mechanisms and organic reducing agents hidden inside Tecoma stans leaf extracts that drive clean iron oxide crystalline formulation.",
-    content: "Traditional chemical synthesis methods for iron oxide nanoparticles often introduce harmful surfactants and chemical stabilizers into ecological systems. Our current laboratory benchmarks utilize organic leaf extracts from Tecoma stans as high-efficiency reducing matrices. The presence of dense polyphenols and flavonoids facilitates the prompt transition of ferric salts into highly stable crystalline structures at a mild 75°C thermal state. This organic shell not only prevents particle agglomeration but dramatically enhances safe seed-germination metrics when applied to sustainable agricultural matrices.",
-    author: "Kornkanok P.",
-    date: "April 29, 2026",
-    readingTime: "7 min read",
-    imageUrl: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=800&auto=format&fit=crop",
-    tags: ["Nanotechnology", "Biochemistry", "GreenScience"],
-    likes: 98,
-    views: 1205
-  },
-  {
-    id: 3,
-    title: "Anatomy of a Packet Capture: Trace-Mapping Malicious Network Vectors",
-    summary: "Breaking down real-time Wireshark capture logs to spot abnormal handshake structures, malicious subnet scans, and stealthy shellcode injection streams.",
-    content: "Defending distributed enterprise network nodes requires an intimate familiarity with packet syntax. During recent capture training, we simulated a multi-vector network scan targeting active subnets. By implementing targeted packet filters inside Wireshark and writing custom low-overhead Scapy scripts, we intercepted suspicious TCP sequence variations indicating automated port enumeration loops. Spotting these markers within milliseconds allows defensive engineers to implement dynamic firewall tables, effectively isolating malicious payloads before data corruption sequences can trigger.",
-    author: "Nattakit M.",
-    date: "April 12, 2026",
-    readingTime: "4 min read",
-    imageUrl: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?q=80&w=800&auto=format&fit=crop",
-    tags: ["Cybersecurity", "Networking", "BlueTeam"],
-    likes: 115,
-    views: 1492
-  }
-];
+// 🔌 นำเข้า supabase client
+import { supabase } from '../supabaseClient'; 
 
 export default function Posts() {
-  const [posts, setPosts] = useState(INITIAL_POSTS);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [likedPosts, setLikedPosts] = useState({}); // Tracks which posts the current user clicked
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false); // ตรวจสอบสิทธิ์แอดมินและซูเปอร์แอดมินจากระบบ
+  const [likedPosts, setLikedPosts] = useState({});
 
-  // Create Post Form States
+  // Form States สำหรับ Admin เขียนโพสต์
   const [newTitle, setNewTitle] = useState('');
   const [newSummary, setNewSummary] = useState('');
   const [newContent, setNewContent] = useState('');
-  const [newImage, setNewImage] = useState('');
+  const [imageFile, setImageFile] = useState(null); 
+  const [attachmentFile, setAttachmentFile] = useState(null); 
+  const [isDownloadEnabled, setIsDownloadEnabled] = useState(true); 
+  const [isDiscussEnabled, setIsDiscussEnabled] = useState(true); 
   const [newTags, setNewTags] = useState('');
+  const [uploading, setUploading] = useState(false);
 
-  // Engagement Logic: Safe immutable increment
-  const handleLike = (postId) => {
-    const alreadyLiked = likedPosts[postId];
-    
-    setLikedPosts(prev => ({
-      ...prev,
-      [postId]: !alreadyLiked
-    }));
+  // 🔐 [แก้ไขข้อ 5] ปรับปรุงระบบเช็คสิทธิ์ให้รองรับ Super Admin และตรวจสอบผ่าน App Metadata เพื่อความปลอดภัย
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error) throw error;
 
-    setPosts(prevPosts => prevPosts.map(post => {
-      if (post.id === postId) {
-        return {
-          ...post,
-          likes: alreadyLiked ? post.likes - 1 : post.likes + 1
-        };
+        if (user) {
+          // ดึงค่าบทบาทจาก user_metadata และ app_metadata มาแปลงเป็นตัวพิมพ์เล็ก
+          const roleFromUserMeta = user.user_metadata?.role?.toLowerCase() || '';
+          const roleFromAppMeta = user.app_metadata?.role?.toLowerCase() || '';
+          const userEmail = user.email?.toLowerCase() || '';
+          
+          // เงื่อนไข: สิทธิ์ผ่านถ้ามีคำว่า 'admin' อยู่ในบทบาท หรือเป็นอีเมลแอดมินหลัก
+          const hasAdminRole = 
+            roleFromUserMeta.includes('admin') || 
+            roleFromAppMeta.includes('admin') || 
+            userEmail === 'admin@atier.com' ||
+            userEmail.includes('admin') ||
+            user.user_metadata?.is_admin === true ||
+            user.app_metadata?.is_admin === true;
+
+          setIsAdmin(hasAdminRole);
+        } else {
+          setIsAdmin(false);
+        }
+      } catch (err) {
+        console.error("Error checking admin status:", err.message);
+        setIsAdmin(false);
       }
-      return post;
-    }));
+    };
+    checkAdminStatus();
+  }, []);
+
+  // 🔄 ดึงข้อมูลและเชื่อมต่อระบบ Real-time Sync ข้ามเครื่อง
+  const fetchPosts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('posts')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setPosts(data || []);
+    } catch (err) {
+      console.error("Error fetching posts:", err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Content Creation Form Submission
-  const handleCreatePost = (e) => {
-    e.preventDefault();
-    if (!newTitle || !newContent || !newSummary) return;
+  useEffect(() => {
+    fetchPosts();
 
-    const newPostObj = {
-      id: Date.now(),
-      title: newTitle,
-      summary: newSummary,
-      content: newContent,
-      author: "Admin Editorial",
-      date: "Just Now",
-      readingTime: `${Math.max(1, Math.ceil(newContent.split(' ').length / 200))} min read`,
-      imageUrl: newImage || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=800&auto=format&fit=crop",
-      tags: newTags ? newTags.split(',').map(t => t.trim()) : ["ATier", "Research"],
-      likes: 0,
-      views: 1 // Baseline analytics tracker point
+    // 📡 เปิดสัญญาณดึงข้อมูลการเปลี่ยนแปลงตาราง posts แบบ Real-time
+    const postChannel = supabase
+      .channel('realtime-posts-channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
+        fetchPosts(); 
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(postChannel);
+    };
+  }, []);
+
+  // 📦 ฟังก์ชันสำหรับอัปโหลดไฟล์เข้า Storage Bucket 'post-assets'
+  const uploadToStorage = async (file, folder) => {
+    if (!file) return null;
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileExt}`;
+    const filePath = `${folder}/${fileName}`;
+
+    const { error } = await supabase.storage
+      .from('post-assets')
+      .upload(filePath, file, { cacheControl: '3600', upsert: true });
+
+    if (error) throw error;
+
+    const { data } = supabase.storage.from('post-assets').getPublicUrl(filePath);
+    return { url: data.publicUrl, name: file.name };
+  };
+
+  // 📝 ฟังก์ชันสร้างโพสต์ใหม่ลงฐานข้อมูลกลาง
+  const handleCreatePost = async (e) => {
+    e.preventDefault();
+    if (!newTitle || !newSummary || !newContent) return;
+
+    setUploading(true);
+    try {
+      let imageUrl = "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=800";
+      if (imageFile) {
+        const uploadedImg = await uploadToStorage(imageFile, 'covers');
+        if (uploadedImg) imageUrl = uploadedImg.url;
+      }
+
+      let fileUrl = null;
+      let fileName = null;
+      if (attachmentFile) {
+        const uploadedDoc = await uploadToStorage(attachmentFile, 'materials');
+        if (uploadedDoc) {
+          fileUrl = uploadedDoc.url;
+          fileName = uploadedDoc.name;
+        }
+      }
+
+      const tagsArray = newTags ? newTags.split(',').map(t => t.trim()) : ["ATier", "Research"];
+
+      const { error } = await supabase
+        .from('posts')
+        .insert([{
+          title: newTitle,
+          summary: newSummary,
+          content: newContent,
+          image_url: imageUrl,
+          file_url: fileUrl,
+          file_name: fileName,
+          tags: tagsArray,
+          is_download_enabled: isDownloadEnabled,
+          is_discuss_enabled: isDiscussEnabled,
+          likes: 0,
+          views: 0,
+          comments: []
+        }]);
+
+      if (error) throw error;
+
+      setNewTitle(''); setNewSummary(''); setNewContent('');
+      setNewTags(''); setImageFile(null); setAttachmentFile(null);
+      alert("🎉 เผยแพร่บทความใหม่สำเร็จและอัปเดตไปยังทุกเครื่องแล้ว!");
+    } catch (err) {
+      alert(`❌ อัปโหลดล้มเหลว: ${err.message}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // ❤️ ฟังก์ชันกดไลก์แบบอัปเดตฐานข้อมูลจริง
+  const handleLike = async (post) => {
+    const alreadyLiked = likedPosts[post.id];
+    const updatedLikes = alreadyLiked ? Math.max(0, post.likes - 1) : post.likes + 1;
+
+    setLikedPosts(prev => ({ ...prev, [post.id]: !alreadyLiked }));
+
+    await supabase
+      .from('posts')
+      .update({ likes: updatedLikes })
+      .eq('id', post.id);
+  };
+
+  // 💬 ฟังก์ชันส่งคอมเมนต์บันทึกลงตาราง JSONB
+  const handleAddComment = async (postId, existingComments, text) => {
+    if (!text.trim()) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    const commentatorName = user?.user_metadata?.full_name || user?.email || "Anonymous Student";
+
+    const newCommentObj = {
+      id: `comment-${Date.now()}`,
+      author: commentatorName,
+      text: text,
+      date: "Just now"
     };
 
-    setPosts([newPostObj, ...posts]);
-    
-    // Clear Input Fields cleanly
-    setNewTitle('');
-    setNewSummary('');
-    setNewContent('');
-    setNewImage('');
-    setNewTags('');
+    const updatedComments = [...(existingComments || []), newCommentObj];
+
+    await supabase
+      .from('posts')
+      .update({ comments: updatedComments })
+      .eq('id', postId);
   };
+
+  // ⚙️ ฟังก์ชันแอดมินเปลี่ยนสถานะเปิดปิดคอมเมนต์/ดาวน์โหลดภายหลัง
+  const togglePostSetting = async (postId, column, currentValue) => {
+    await supabase
+      .from('posts')
+      .update({ [column]: !currentValue })
+      .eq('id', postId);
+  };
+
+  // 🗑️ ฟังก์ชันลบโพสต์
+  const handleDeletePost = async (postId) => {
+    if (window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบโพสต์นี้ถาวร?")) {
+      await supabase.from('posts').delete().eq('id', postId);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 flex items-center justify-center text-zinc-400">
+        <div className="animate-pulse font-mono">กำลังเชื่อมโยง Chronicle เรียลไทม์...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-50 py-12 transition-colors duration-200">
       
-      {/* Editorial Navigation Headers */}
+      {/* ส่วนหัวของหน้าเว็บ */}
       <div className="max-w-3xl mx-auto px-4 mb-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <span className="text-xs font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
@@ -130,82 +245,89 @@ export default function Posts() {
             ATier Chronicle
           </h1>
         </div>
-
-        <button 
-          onClick={() => setIsAdmin(!isAdmin)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium border text-xs transition-all shadow-sm ${
-            isAdmin 
-              ? 'bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-400' 
-              : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800'
-          }`}
-        >
-          <Shield className="w-3.5 h-3.5" />
-          <span>{isAdmin ? 'Editor Mode Active' : 'Reader View'}</span>
-        </button>
+        {isAdmin && (
+          <div className="bg-amber-500/10 border border-amber-500/30 text-amber-500 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 animate-pulse">
+            <Shield className="w-3.5 h-3.5" /> แอดมินคอนโทรลรูม
+          </div>
+        )}
       </div>
 
-      {/* COMPONENT DRAWER: MOCK RICH-TEXT EDITOR WIDGET FOR ADMIN PUBLISHING */}
+      {/* 📝 กล่องเขียนโพสต์ที่จะปรากฏเฉพาะ แอดมินและซูเปอร์แอดมิน เท่านั้น */}
       {isAdmin && (
         <div className="max-w-3xl mx-auto px-4 mb-12">
           <div className="bg-white dark:bg-zinc-900 border-2 border-dashed border-amber-500/30 rounded-3xl p-6 shadow-md space-y-4">
             <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-zinc-800/80">
               <Shield className="w-4 h-4 text-amber-500" />
-              <h3 className="text-sm font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Compose New Intellectual Asset</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">สร้าง Asset บทความวิจัยและองค์ความรู้ใหม่</h3>
             </div>
 
             <form onSubmit={handleCreatePost} className="space-y-4">
               <input 
                 type="text" required value={newTitle} onChange={(e) => setNewTitle(e.target.value)}
-                placeholder="Core Headline / Research Title..."
-                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-base font-semibold focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
+                placeholder="Core Headline / ชื่อหัวข้อวิจัยหลัก..."
+                className="w-full px-4 py-2.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-base font-semibold focus:outline-none focus:border-blue-500 transition-colors"
               />
 
               <input 
                 type="text" required value={newSummary} onChange={(e) => setNewSummary(e.target.value)}
-                placeholder="A concise, high-impact subtitle summary context for the card view..."
+                placeholder="คำอธิบายสรุปสั้น ๆ ของเนื้อหา (แสดงในหน้ารวมโพสต์)..."
                 className="w-full px-4 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs text-slate-600 dark:text-zinc-400 focus:outline-none focus:border-blue-500"
               />
 
-              {/* Textarea mimicking rich text text entry bounds */}
-              <div className="border border-slate-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-slate-50 dark:bg-zinc-950">
-                <div className="px-3 py-1.5 border-b border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-900 flex flex-wrap gap-3 text-xs text-slate-400 font-mono select-none">
-                  <span className="font-bold hover:text-slate-600 cursor-pointer">B</span>
-                  <span className="italic hover:text-slate-600 cursor-pointer">I</span>
-                  <span className="underline hover:text-slate-600 cursor-pointer">U</span>
-                  <span className="hover:text-slate-600 cursor-pointer">Quote</span>
-                  <span className="hover:text-slate-600 cursor-pointer">Code Block</span>
-                </div>
-                <textarea 
-                  required rows="5" value={newContent} onChange={(e) => setNewContent(e.target.value)}
-                  placeholder="Draft the body content of your technical article here..."
-                  className="w-full px-4 py-3 bg-transparent text-sm focus:outline-none resize-none leading-relaxed"
-                />
-              </div>
+              <textarea 
+                required rows="5" value={newContent} onChange={(e) => setNewContent(e.target.value)}
+                placeholder="เขียนหรือร่างเนื้อหาบทความเชิงลึกที่นี่..."
+                className="w-full px-4 py-3 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none leading-relaxed resize-none"
+              />
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="relative flex items-center">
-                  <ImageIcon className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
-                  <input 
-                    type="url" value={newImage} onChange={(e) => setNewImage(e.target.value)}
-                    placeholder="Cover image Unsplash URL..."
-                    className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-blue-500"
-                  />
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-zinc-400 block">🖼️ ไฟล์รูปภาพหน้าปก</label>
+                  <div className="relative flex items-center bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl p-2">
+                    <ImageIcon className="w-4 h-4 text-slate-400 ml-2 mr-2" />
+                    <input 
+                      type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files[0])}
+                      className="text-xs text-zinc-400 file:mr-4 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-300 hover:file:bg-zinc-700 cursor-pointer w-full"
+                    />
+                  </div>
                 </div>
 
-                <input 
-                  type="text" value={newTags} onChange={(e) => setNewTags(e.target.value)}
-                  placeholder="Tags (comma separated: C++, Research)"
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:border-blue-500"
-                />
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-zinc-400 block">📎 ไฟล์ประกอบสำหรับผู้เรียนดาวน์โหลด</label>
+                  <div className="relative flex items-center bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl p-2">
+                    <Paperclip className="w-4 h-4 text-slate-400 ml-2 mr-2" />
+                    <input 
+                      type="file" onChange={(e) => setAttachmentFile(e.target.files[0])}
+                      className="text-xs text-zinc-400 file:mr-4 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-zinc-300 hover:file:bg-zinc-700 cursor-pointer w-full"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <input 
+                type="text" value={newTags} onChange={(e) => setNewTags(e.target.value)}
+                placeholder="แท็กหัวข้อ (คั่นด้วยเครื่องหมายจุลภาค เช่น: Competitive, C++, Nanoscience)"
+                className="w-full px-4 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none"
+              />
+
+              <div className="flex flex-wrap gap-6 pt-1 text-xs font-semibold text-zinc-400">
+                <button type="button" onClick={() => setIsDownloadEnabled(!isDownloadEnabled)} className="flex items-center gap-1.5 hover:text-white transition-colors">
+                  {isDownloadEnabled ? <ToggleRight className="w-5 h-5 text-emerald-500" /> : <ToggleLeft className="w-5 h-5 text-zinc-600" />}
+                  <span>อนุญาตให้ผู้ใช้อื่นดาวน์โหลดไฟล์แนบนี้</span>
+                </button>
+                <button type="button" onClick={() => setIsDiscussEnabled(!isDiscussEnabled)} className="flex items-center gap-1.5 hover:text-white transition-colors">
+                  {isDiscussEnabled ? <ToggleRight className="w-5 h-5 text-emerald-500" /> : <ToggleLeft className="w-5 h-5 text-zinc-600" />}
+                  <span>เปิดระบบแสดงความคิดเห็น (Discuss)</span>
+                </button>
               </div>
 
               <div className="flex justify-end pt-2">
                 <button
-                  type="submit"
-                  className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-950 font-bold text-xs shadow-sm transition-transform active:scale-98"
+                  type="submit" disabled={uploading}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-950 font-bold text-xs shadow-sm transition-all disabled:opacity-50"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  <span>Publish to Chronicle</span>
+                  <span>{uploading ? 'กำลังประมวลผลคลาวด์...' : 'Publish to Chronicle'}</span>
                 </button>
               </div>
             </form>
@@ -213,99 +335,213 @@ export default function Posts() {
         </div>
       )}
 
-      {/* CORE CHRONICLE FEED LIST LAYOUT */}
+      {/* 📇 รายการแสดงผลบล็อกบทความ */}
       <div className="max-w-3xl mx-auto px-4 space-y-10">
-        {posts.map((post) => {
-          const isCurrentPostLiked = likedPosts[post.id];
+        {posts.length === 0 ? (
+          <div className="text-center text-zinc-500 font-mono text-sm py-12">ยังไม่มีบทความที่เผยแพร่ในระบบ</div>
+        ) : (
+          posts.map((post) => (
+            <PostCard 
+              key={post.id} 
+              post={post} 
+              isAdmin={isAdmin} 
+              likedPosts={likedPosts} 
+              handleLike={handleLike}
+              handleAddComment={handleAddComment}
+              togglePostSetting={togglePostSetting}
+              handleDeletePost={handleDeletePost}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
 
-          return (
-            <article 
-              key={post.id}
-              className="bg-white dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60 rounded-3xl p-6 md:p-8 shadow-sm hover:shadow-md transition-shadow duration-300 space-y-5"
-            >
-              {/* Post Meta Row */}
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 dark:text-zinc-500 font-medium">
-                <div className="flex items-center gap-4">
-                  <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-blue-500" /> {post.author}</span>
-                  <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {post.date}</span>
-                </div>
-                <span className="flex items-center gap-1.5 bg-slate-50 dark:bg-zinc-950 px-2.5 py-1 rounded-md text-[11px] font-semibold"><Clock className="w-3.5 h-3.5" /> {post.readingTime}</span>
-              </div>
+// 📦 ส่วนการ์ดแสดงผลบทความย่อย
+function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, togglePostSetting, handleDeletePost }) {
+  const isCurrentPostLiked = likedPosts[post.id];
+  const [showDiscussSection, setShowDiscussSection] = useState(false);
+  const [commentInput, setCommentInput] = useState('');
 
-              {/* Dynamic Header Typography & Summary */}
-              <div className="space-y-2">
-                <h2 className="text-xl md:text-2xl font-extrabold text-slate-950 dark:text-zinc-100 tracking-tight leading-tight">
-                  {post.title}
-                </h2>
-                <p className="text-sm font-medium text-slate-500 dark:text-zinc-400 border-l-2 border-blue-500 pl-3 py-0.5">
-                  {post.summary}
-                </p>
-              </div>
+  // ระบบนับยอดวิวเรียลไทม์
+  useEffect(() => {
+    const triggerViewIncrement = async () => {
+      const viewedHistory = JSON.parse(sessionStorage.getItem('atier_viewed_chronicles') || '[]');
+      if (!viewedHistory.includes(post.id)) {
+        viewedHistory.push(post.id);
+        sessionStorage.setItem('atier_viewed_chronicles', JSON.stringify(viewedHistory));
+        
+        await supabase
+          .from('posts')
+          .update({ views: (post.views || 0) + 1 })
+          .eq('id', post.id);
+      }
+    };
+    triggerViewIncrement();
+  }, [post.id]);
 
-              {/* High-Quality Graphic Banner Image Frame */}
-              <div className="w-full h-64 md:h-80 rounded-2xl overflow-hidden bg-slate-100 dark:bg-zinc-800 border border-slate-100 dark:border-zinc-800/60">
-                <img 
-                  src={post.imageUrl} 
-                  alt={post.title} 
-                  className="w-full h-full object-cover select-none" 
-                  loading="lazy"
-                />
-              </div>
-
-              {/* Formatted Premium Typography Body Section */}
-              <p className="text-sm md:text-base text-slate-700 dark:text-zinc-300 font-normal leading-relaxed text-justify tracking-wide">
-                {post.content}
-              </p>
-
-              {/* Lower Section Metadata Tags */}
-              <div className="flex flex-wrap gap-1.5 pt-2">
-                {post.tags.map((tag, idx) => (
-                  <span 
-                    key={idx}
-                    className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-slate-50 dark:bg-zinc-950 text-slate-400 dark:text-zinc-500 border border-slate-200/40 dark:border-zinc-800/40"
-                  >
-                    #{tag}
-                  </span>
-                ))}
-              </div>
-
-              {/* INTERACTIVE ENGAGEMENT CONTROLS BLOCK */}
-              <div className="pt-4 border-t border-slate-100 dark:border-zinc-800/60 flex items-center justify-between">
-                <div className="flex items-center gap-5">
-                  {/* Hearts Like Trigger Counter Mechanism */}
-                  <button
-                    onClick={() => handleLike(post.id)}
-                    className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all ${
-                      isCurrentPostLiked 
-                        ? 'bg-red-500/10 border-red-500/30 text-red-500' 
-                        : 'bg-slate-50 dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400 hover:text-red-500 dark:hover:text-red-400'
-                    }`}
-                  >
-                    <Heart className={`w-4 h-4 transition-transform active:scale-125 ${isCurrentPostLiked ? 'fill-current' : ''}`} />
-                    <span className="font-mono">{post.likes}</span>
-                  </button>
-
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-zinc-500 font-medium">
-                    <MessageSquare className="w-4 h-4" />
-                    <span>Discuss</span>
-                  </div>
-                </div>
-
-                {/* Simulated Backend Tracker Views Counter Metic Indicator */}
-                <div className="flex items-center gap-4 text-xs text-slate-400 dark:text-zinc-500 font-medium font-mono">
-                  <div className="flex items-center gap-1" title="Monitored systemic impressions matrix counter">
-                    <Eye className="w-4 h-4 text-slate-300 dark:text-zinc-700" />
-                    <span>{post.views} views</span>
-                  </div>
-                  <Share2 className="w-4 h-4 text-slate-300 dark:text-zinc-700 hover:text-slate-500 cursor-pointer transition-colors" />
-                </div>
-              </div>
-
-            </article>
-          );
-        })}
+  return (
+    <article className="bg-white dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60 rounded-3xl p-6 md:p-8 shadow-sm hover:shadow-md transition-all duration-300 space-y-5 relative">
+      
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 dark:text-zinc-500 font-medium">
+        <div className="flex items-center gap-4">
+          <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-blue-500" /> {post.author}</span>
+          <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {new Date(post.created_at).toLocaleDateString('th-TH', {day:'numeric', month:'short', year:'numeric'})}</span>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <div className="flex items-center gap-2 border border-amber-500/20 bg-amber-500/5 px-2.5 py-1 rounded-xl text-[10px] text-amber-500 font-bold">
+              <button onClick={() => togglePostSetting(post.id, 'is_download_enabled', post.is_download_enabled)} className="hover:underline">
+                {post.is_download_enabled ? "🔓 ดาวน์โหลดเปิด" : "🔒 ดาวน์โหลดปิด"}
+              </button>
+              <span className="text-zinc-700">|</span>
+              <button onClick={() => togglePostSetting(post.id, 'is_discuss_enabled', post.is_discuss_enabled)} className="hover:underline">
+                {post.is_discuss_enabled ? "🔓 คอมเมนต์เปิด" : "🔒 คอมเมนต์ปิด"}
+              </button>
+              <span className="text-zinc-700">|</span>
+              <button onClick={() => handleDeletePost(post.id)} className="text-red-400 hover:text-red-500">
+                <Trash2 className="w-3 h-3 inline" />
+              </button>
+            </div>
+          )}
+          <span className="flex items-center gap-1.5 bg-slate-50 dark:bg-zinc-950 px-2.5 py-1 rounded-md text-[11px] font-semibold"><Clock className="w-3.5 h-3.5" /> 5 min read</span>
+        </div>
       </div>
 
-    </div>
+      <div className="space-y-2">
+        <h2 className="text-xl md:text-2xl font-extrabold text-slate-950 dark:text-zinc-100 tracking-tight leading-tight">{post.title}</h2>
+        <p className="text-sm font-medium text-slate-500 dark:text-zinc-400 border-l-2 border-blue-500 pl-3 py-0.5">{post.summary}</p>
+      </div>
+
+      {post.image_url && (
+        <div className="w-full h-64 md:h-80 rounded-2xl overflow-hidden bg-slate-100 dark:bg-zinc-800 border border-slate-100 dark:border-zinc-800/60">
+          <img src={post.image_url} alt={post.title} className="w-full h-full object-cover select-none" loading="lazy" />
+        </div>
+      )}
+
+      <p className="text-sm md:text-base text-slate-700 dark:text-zinc-300 font-normal leading-relaxed text-justify whitespace-pre-wrap">{post.content}</p>
+
+      {post.file_url && (
+        <div className="p-4 bg-slate-50 dark:bg-zinc-950/60 border border-slate-200/60 dark:border-zinc-800/60 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Paperclip className="w-4 h-4 text-blue-500 shrink-0" />
+            <div className="truncate">
+              <p className="text-xs font-bold text-slate-700 dark:text-zinc-300 truncate">{post.file_name || 'Attached_Resource.pdf'}</p>
+              <p className="text-[10px] text-slate-400">เอกสารแนบยืนยันความรู้ประจำบทความ</p>
+            </div>
+          </div>
+          
+          {post.is_download_enabled ? (
+            <a 
+              href={post.file_url} download target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition-colors shadow-sm cursor-pointer whitespace-nowrap"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download Resource</span>
+            </a>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-zinc-800 text-zinc-500 text-xs font-bold select-none whitespace-nowrap border border-zinc-700">
+              🔒สิทธิ์ดาวน์โหลดถูกปิดโดยแอดมิน
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-1.5 pt-1">
+        {post.tags && post.tags.map((tag, idx) => (
+          <span key={idx} className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-slate-50 dark:bg-zinc-950 text-slate-400 dark:text-zinc-500 border border-slate-200/40 dark:border-zinc-800/40">#{tag}</span>
+        ))}
+      </div>
+
+      <div className="pt-4 border-t border-slate-100 dark:border-zinc-800/60 flex items-center justify-between">
+        <div className="flex items-center gap-5">
+          <button
+            onClick={() => handleLike(post)}
+            className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all ${
+              isCurrentPostLiked 
+                ? 'bg-red-500/10 border-red-500/30 text-red-500' 
+                : 'bg-slate-50 dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400 hover:text-red-500 dark:hover:text-red-400'
+            }`}
+          >
+            <Heart className={`w-4 h-4 transition-transform active:scale-125 ${isCurrentPostLiked ? 'fill-current' : ''}`} />
+            <span className="font-mono">{post.likes || 0}</span>
+          </button>
+
+          <button 
+            onClick={() => setShowDiscussSection(!showDiscussSection)}
+            className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-xl border transition-all ${
+              showDiscussSection 
+                ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' 
+                : 'bg-slate-50 dark:bg-zinc-950 border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400 hover:text-blue-400'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>Discuss ({post.comments?.length || 0})</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-4 text-xs text-slate-400 dark:text-zinc-500 font-medium font-mono">
+          <div className="flex items-center gap-1" title="Real-time impression counter">
+            <Eye className="w-4 h-4 text-slate-300 dark:text-zinc-700 animate-pulse" />
+            <span>{post.views || 0} views</span>
+          </div>
+          <Share2 className="w-4 h-4 text-slate-300 dark:text-zinc-700 hover:text-slate-500 cursor-pointer transition-colors" />
+        </div>
+      </div>
+
+      {showDiscussSection && (
+        <div className="pt-4 border-t border-slate-100 dark:border-zinc-800/60 space-y-4 bg-slate-50/50 dark:bg-zinc-950/30 p-4 rounded-2xl">
+          <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">ห้องสนทนาแลกเปลี่ยนความคิดเห็น</h4>
+          
+          <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+            {(!post.comments || post.comments.length === 0) ? (
+              <p className="text-xs text-zinc-500 italic font-mono pl-1">ยังไม่มีข้อความสนทนา... มาร่วมเปิดประเด็นกันครับ!</p>
+            ) : (
+              post.comments.map((comment, i) => (
+                <div key={comment.id || i} className="bg-white dark:bg-zinc-900 border border-slate-200/50 dark:border-zinc-800/80 p-3 rounded-xl shadow-xs">
+                  <div className="flex justify-between items-center text-[11px] mb-1">
+                    <span className="font-bold text-blue-500 dark:text-blue-400">{comment.author}</span>
+                    <span className="text-zinc-500 font-mono text-[10px]">{comment.date}</span>
+                  </div>
+                  <p className="text-xs text-slate-700 dark:text-zinc-300 leading-relaxed">{comment.text}</p>
+                </div>
+              ))
+            )}
+          </div>
+
+          {post.is_discuss_enabled ? (
+            <div className="flex items-center gap-2 pt-2">
+              <input 
+                type="text" value={commentInput} onChange={(e) => setCommentInput(e.target.value)}
+                placeholder="ร่วมแชร์มุมมอง พิมพ์ข้อความที่นี่..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleAddComment(post.id, post.comments, commentInput);
+                    setCommentInput('');
+                  }
+                }}
+                className="w-full px-4 py-2 text-xs bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:border-blue-500 transition-colors"
+              />
+              <button 
+                onClick={() => {
+                  handleAddComment(post.id, post.comments, commentInput);
+                  setCommentInput('');
+                }}
+                className="p-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition-colors cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="text-center p-2.5 bg-zinc-800/50 border border-zinc-800 text-zinc-500 rounded-xl text-xs font-semibold select-none">
+              🔒 กล่องข้อความสลับปิดการใช้งานชั่วคราวโดยอาจารย์หรือผู้ดูแลระบบ
+            </div>
+          )}
+        </div>
+      )}
+
+    </article>
   );
 }
