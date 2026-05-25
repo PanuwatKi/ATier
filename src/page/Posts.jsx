@@ -25,7 +25,7 @@ export default function Posts() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false); // ควบคุมการเข้าถึงปุ่มสำหรับ Admin และ Super Admin
-  const [isRealAdmin, setIsRealAdmin] = useState(false); // ใช้ล็อกตัวปุ่ม Dev Bypass ให้เห็นเฉพาะแอดมินจริง
+  const [isRealAdmin, setIsRealAdmin] = useState(false); // ใช้ล็อกตัวปุ่ม Dev Bypass ให้เห็นเฉพาะแอดมินจริงเมื่ออยู่บน Production
   const [likedPosts, setLikedPosts] = useState({});
   
   // 🛠️ Dev Mode Mode Override (สำหรับทดสอบหน้าตา UI แอดมินได้ทันที)
@@ -44,10 +44,11 @@ export default function Posts() {
 
   // 🔐 ระบบตรวจสอบสิทธิ์แบบ Real-time ปลอดภัยและรัดกุมสูงสุด
   useEffect(() => {
-    const evaluateAdminStatus = (user) => {
+    const syncAdminStatus = (user) => {
       if (!user) {
         setIsRealAdmin(false);
-        return devBypass;
+        setIsAdmin(devBypass);
+        return;
       }
 
       // ตรวจสอบสิทธิ์จาก metadata อย่างละเอียด
@@ -89,18 +90,17 @@ export default function Posts() {
         userEmail === 'admin@atier.com'; // กำหนดเฉพาะอีเมลแอดมินหลักที่เจาะจงเท่านั้น
 
       setIsRealAdmin(hasAuthorizedRole);
-      return hasAuthorizedRole || devBypass;
+      setIsAdmin(hasAuthorizedRole || devBypass);
     };
-
-    // 🔄 ใช้ Auth Listener ดักจับการเปลี่ยนแปลงสิทธิ์ข้ามบัญชีทันทีโดยไม่ต้องรีเฟรชหน้าเว็บ
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      const currentUser = session?.user || null;
-      setIsAdmin(evaluateAdminStatus(currentUser));
-    });
 
     // เรียกตรวจสอบครั้งแรกเมื่อคอมโพเนนต์เรนเดอร์สำเร็จ
     supabase.auth.getUser().then(({ data: { user } }) => {
-      setIsAdmin(evaluateAdminStatus(user));
+      syncAdminStatus(user);
+    });
+
+    // 🔄 ใช้ Auth Listener ดักจับการเปลี่ยนแปลงสิทธิ์ข้ามบัญชีทันทีโดยไม่ต้องรีเฟรชหน้าเว็บ
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      syncAdminStatus(session?.user || null);
     });
 
     return () => {
@@ -259,6 +259,12 @@ export default function Posts() {
     );
   }
 
+  // 🌐 เช็คสภาพแวดล้อมเพื่อความสะดวกในการพัฒนา (แสดงปุ่ม Dev Bypass อัตโนมัติเมื่ออยู่บน Localhost)
+  const isLocalDev = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' || 
+    window.location.hostname === '127.0.0.1'
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-50 py-12 transition-colors duration-200 pb-24">
       
@@ -382,8 +388,8 @@ export default function Posts() {
         )}
       </div>
 
-      {/* 🛠️ DEV MODE FLOATING PANEL: ปรับปรุงความปลอดภัย ให้แสดงผลเฉพาะแอดมินหลังบ้านตัวจริงเท่านั้น */}
-      {isRealAdmin && (
+      {/* 🛠️ DEV MODE FLOATING PANEL: แสดงปุ่มทันทีบนเครื่อง localhost หรือเมื่อล็อกอินด้วยไอดีแอดมินจริงแล้ว */}
+      {(isLocalDev || isRealAdmin) && (
         <div className="fixed bottom-4 right-4 z-50 bg-zinc-900 border border-zinc-800 p-3 rounded-2xl shadow-xl flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
             <Wrench className="w-3.5 h-3.5 animate-spin" />
