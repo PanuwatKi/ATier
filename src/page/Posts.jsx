@@ -18,7 +18,7 @@ import {
   Trash2,
   Wrench
 } from 'lucide-react';
-// 🔐 นำเข้า useAuth เพื่อเรียกใช้สิทธิ์แบบรวมศูนย์เหมือนหน้าอื่น ๆ
+// 🔐 นำเข้า useAuth เพื่อเรียกใช้สิทธิ์แบบรวมศูนย์
 import { useAuth } from '../context/AuthContext'; 
 // 🔌 นำเข้า supabase client
 import { supabase } from '../supabaseClient'; 
@@ -49,7 +49,7 @@ export default function Posts() {
     window.location.hostname === '127.0.0.1'
   );
 
-  // ตรวจสอบสิทธิ์ว่าผู้ใช้รายนี้มีสิทธิ์เป็นแอดมินหรือไม่
+  // ตรวจสอบสิทธิ์ว่าเป็นแอดมินหรือไม่
   const isAdminUser = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin' || user?.email?.toLowerCase() === 'admin@atier.com';
 
   // ซิงค์สวิตช์โหมดการแสดงผล UI แอดมินอัตโนมัติ
@@ -137,7 +137,6 @@ export default function Posts() {
 
       const tagsArray = newTags ? newTags.split(',').map(t => t.trim()) : ["ATier", "Research"];
 
-      // 🚀 แนบข้อมูล user_id ลงในการ Insert เพื่อปลดล็อก RLS Policy ของ Supabase
       const { error } = await supabase
         .from('posts')
         .insert([{
@@ -150,10 +149,11 @@ export default function Posts() {
           tags: tagsArray,
           is_download_enabled: isDownloadEnabled,
           is_discuss_enabled: isDiscussEnabled,
+          is_hidden: false, // บันทึกค่าเริ่มต้นเป็นยังไม่ซ่อน
           likes: 0,
           views: 0,
           comments: [],
-          user_id: user?.id // ⭐ เพิ่มจุดสำคัญตรงนี้
+          user_id: user?.id 
         }]);
 
       if (error) throw error;
@@ -162,7 +162,7 @@ export default function Posts() {
       setNewTags(''); setImageFile(null); setAttachmentFile(null);
       alert("🎉 เผยแพร่บทความใหม่สำเร็จและอัปเดตไปยังทุกเครื่องแล้ว!");
     } catch (err) {
-      alert(`❌ อัปโหลดล้มเหลว: ${err.message}\n\n💡 วิธีแก้ไข: ตรวจสอบโครงสร้างตาราง 'posts' ว่ามีคอลัมน์ user_id (ประเภท uuid หรือ text) รองรับแล้วหรือไม่ และเช็ค RLS Policy บน Supabase Dashboard ให้สิทธิ์ในการ INSERT แก่กลุ่ม Authenticated Users ครับ`);
+      alert(`❌ อัปโหลดล้มเหลว: ${err.message}`);
     } finally {
       setUploading(false);
     }
@@ -196,20 +196,36 @@ export default function Posts() {
     });
   };
 
+  // ⚙️ ฟังก์ชันอัปเดตตั้งค่าแบบไดนามิก (เปิด/ปิดดาวน์โหลด, คอมเมนต์, ซ่อนโพสต์)
   const togglePostSetting = async (postId, column, currentValue) => {
     try {
-      await supabase.from('posts').update({ [column]: !currentValue }).eq('id', postId);
+      const { error } = await supabase
+        .from('posts')
+        .update({ [column]: !currentValue })
+        .eq('id', postId);
+      
+      if (error) throw error;
     } catch (err) {
+      alert(`❌ ไม่สามารถอัปเดตการตั้งค่าได้: ${err.message}`);
       console.error(err);
     }
   };
 
+  // 🗑️ ฟังก์ชันลบโพสต์ถาวร (เพิ่มการดึง Error และการ Alert แจ้งสถานะ)
   const handleDeletePost = async (postId) => {
-    if (window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบโพสต์นี้ถาวร?")) {
+    if (window.confirm("❗ คุณแน่ใจหรือไม่ว่าต้องการลบโพสต์นี้ถาวร? การกระทำนี้ไม่สามารถย้อนคืนได้")) {
       try {
-        await supabase.from('posts').delete().eq('id', postId);
+        const { error, count } = await supabase
+          .from('posts')
+          .delete()
+          .eq('id', postId);
+        
+        if (error) throw error;
+        
+        alert("🗑️ ลบโพสต์ออกจากฐานข้อมูลระบบเรียบร้อยแล้ว!");
       } catch (err) {
-        console.error(err);
+        alert(`❌ ลบล้มเหลว: ${err.message}\n\n💡 คำแนะนำ: ตรวจสอบความถูกต้องของนโยบาย RLS (DELETE) บนตาราง 'posts' อีกครั้งครับ`);
+        console.error("Delete failed:", err);
       }
     }
   };
@@ -330,18 +346,20 @@ export default function Posts() {
         {posts.length === 0 ? (
           <div className="text-center text-zinc-500 font-mono text-sm py-12">ยังไม่มีบทความที่เผยแพร่ในระบบ</div>
         ) : (
-          posts.map((post) => (
-            <PostCard 
-              key={post.id} 
-              post={post} 
-              isAdmin={isAdmin} 
-              likedPosts={likedPosts} 
-              handleLike={handleLike}
-              handleAddComment={handleAddComment}
-              togglePostSetting={togglePostSetting}
-              handleDeletePost={handleDeletePost}
-            />
-          ))
+          posts
+            .filter(post => !post.is_hidden || isAdmin) // 🛠️ กรองโพสต์: ถ้าถูกซ่อน คนทั่วไปจะไม่เห็น แต่ Admin จะยังมองเห็นอยู่
+            .map((post) => (
+              <PostCard 
+                key={post.id} 
+                post={post} 
+                isAdmin={isAdmin} 
+                likedPosts={likedPosts} 
+                handleLike={handleLike}
+                handleAddComment={handleAddComment}
+                togglePostSetting={togglePostSetting}
+                handleDeletePost={handleDeletePost}
+              />
+            ))
         )}
       </div>
 
@@ -375,6 +393,9 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
 
   useEffect(() => {
     const triggerViewIncrement = async () => {
+      // ป้องกันการนับยอดวิวซ้ำให้กับโพสต์ที่ถูกซ่อนอยู่
+      if (post.is_hidden) return;
+
       const viewedHistory = JSON.parse(sessionStorage.getItem('atier_viewed_chronicles') || '[]');
       if (!viewedHistory.includes(post.id)) {
         viewedHistory.push(post.id);
@@ -387,28 +408,48 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
       }
     };
     triggerViewIncrement();
-  }, [post.id]);
+  }, [post.id, post.is_hidden]);
 
   return (
-    <article className="bg-white dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60 rounded-3xl p-6 md:p-8 shadow-sm hover:shadow-md transition-all duration-300 space-y-5 relative">
+    // 🎨 ปรับแต่งสไตล์การ์ด: หากโพสต์โดนซ่อน จะกลายเป็นกรอบขีดสลักสีส้มจาง ๆ เพื่อให้แอดมินแยกแยะได้ง่าย
+    <article className={`bg-white dark:bg-zinc-900 border rounded-3xl p-6 md:p-8 shadow-sm hover:shadow-md transition-all duration-300 space-y-5 relative ${
+      post.is_hidden 
+        ? 'border-dashed border-amber-500/40 bg-amber-500/[0.01] dark:bg-amber-500/[0.02] opacity-80' 
+        : 'border-slate-200/60 dark:border-zinc-800/60'
+    }`}>
       
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 dark:text-zinc-500 font-medium">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-blue-500" /> {post.author || "System"}</span>
           <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {post.created_at ? new Date(post.created_at).toLocaleDateString('th-TH', {day:'numeric', month:'short', year:'numeric'}) : "Just now"}</span>
+          
+          {/* ป้ายกำกับแจ้งเตือนสถานะ Hidden บนโพสต์ */}
+          {post.is_hidden && (
+            <span className="bg-amber-500/20 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider animate-pulse">
+              🔒 ซ่อนอยู่ (Hidden)
+            </span>
+          )}
         </div>
         
         <div className="flex items-center gap-2">
           {isAdmin && (
             <div className="flex items-center gap-2 border border-amber-500/20 bg-amber-500/5 px-2.5 py-1 rounded-xl text-[10px] text-amber-500 font-bold">
+              {/* 👁️ ปุ่มฟังก์ชันซ่อนโพสต์สำหรับแอดมิน */}
+              <button onClick={() => togglePostSetting(post.id, 'is_hidden', post.is_hidden)} className="text-amber-600 dark:text-amber-400 hover:underline">
+                {post.is_hidden ? "👁️ แสดงโพสต์" : "🚫 ซ่อนโพสต์"}
+              </button>
+              <span className="text-zinc-700">|</span>
+              
               <button onClick={() => togglePostSetting(post.id, 'is_download_enabled', post.is_download_enabled)} className="hover:underline">
                 {post.is_download_enabled ? "🔓 ดาวน์โหลดเปิด" : "🔒 ดาวน์โหลดปิด"}
               </button>
               <span className="text-zinc-700">|</span>
+              
               <button onClick={() => togglePostSetting(post.id, 'is_discuss_enabled', post.is_discuss_enabled)} className="hover:underline">
                 {post.is_discuss_enabled ? "🔓 คอมเมนต์เปิด" : "🔒 คอมเมนต์ปิด"}
               </button>
               <span className="text-zinc-700">|</span>
+              
               <button onClick={() => handleDeletePost(post.id)} className="text-red-400 hover:text-red-500">
                 <Trash2 className="w-3 h-3 inline" />
               </button>
