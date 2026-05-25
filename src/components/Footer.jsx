@@ -12,7 +12,7 @@ export default function Footer() {
           {/*ฝั่งซ้าย: ข้อมูลองค์กร */}
           <div className="text-center md:text-left">
             <span className="text-lg font-black tracking-wider text-gray-900 dark:text-white">
-              ATier
+              Adusaurus
             </span>
             <p className="mt-1 text-xs max-w-md text-gray-400 dark:text-gray-500">
               A group of boys

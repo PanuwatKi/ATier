@@ -31,7 +31,7 @@ export default function Navbar() {
           
           <div className="flex-shrink-0">
             <Link to="/" className="text-2xl font-black tracking-wider bg-gradient-to-r from-blue-600 to-indigo-500 bg-clip-text text-transparent dark:from-blue-400 dark:to-indigo-300">
-              ATier
+              Adusaurus
             </Link>
           </div>
 

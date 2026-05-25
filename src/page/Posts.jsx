@@ -50,7 +50,7 @@ export default function Posts() {
   );
 
   // ตรวจสอบสิทธิ์ว่าเป็นแอดมินหรือไม่
-  const isAdminUser = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin' || user?.email?.toLowerCase() === 'admin@atier.com';
+  const isAdminUser = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin';
 
   // ซิงค์สวิตช์โหมดการแสดงผล UI แอดมินอัตโนมัติ
   useEffect(() => {
@@ -248,7 +248,7 @@ export default function Posts() {
             <Sparkles className="w-3.5 h-3.5" /> Posts
           </span>
           <h1 className="text-3xl font-extrabold tracking-tight mt-1 bg-gradient-to-r from-slate-900 to-indigo-950 dark:from-white dark:to-zinc-400 bg-clip-text text-transparent">
-            ATier Posts 
+            Adusaurus Posts 
           </h1>
         </div>
         {isAdmin && (

@@ -73,7 +73,7 @@ export default function Home() {
       <div className="max-w-7xl mx-auto px-4 mb-10 flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-500 bg-clip-text text-transparent dark:from-blue-400 dark:to-indigo-300">
-            ATier Dashboard
+            Adusaurus Dashboard
           </h1>
           <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">Our elite ecosystem of change-makers.</p>
         </div>

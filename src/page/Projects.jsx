@@ -99,7 +99,7 @@ export default function Projects() {
       <div className="max-w-6xl mx-auto px-4 mb-12 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold text-sm tracking-wider uppercase">
-            <FolderGit2 className="w-4 h-4" /> ATier Repositories
+            <FolderGit2 className="w-4 h-4" /> Adusaurus Projects
           </div>
           <h1 className="text-4xl font-extrabold tracking-tight mt-1 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 dark:from-white dark:via-zinc-200 dark:to-zinc-500 bg-clip-text text-transparent">
             Engineering Initiatives
