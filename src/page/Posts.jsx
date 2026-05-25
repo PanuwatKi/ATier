@@ -23,7 +23,7 @@ import { supabase } from '../supabaseClient';
 export default function Posts() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false); // ตรวจสอบสิทธิ์แอดมินและซูเปอร์แอดมินจากระบบ
+  const [isAdmin, setIsAdmin] = useState(false); // ควบคุมการเข้าถึงปุ่มสำหรับ Admin และ Super Admin
   const [likedPosts, setLikedPosts] = useState({});
 
   // Form States สำหรับ Admin เขียนโพสต์
@@ -37,7 +37,7 @@ export default function Posts() {
   const [newTags, setNewTags] = useState('');
   const [uploading, setUploading] = useState(false);
 
-  // 🔐 [แก้ไขข้อ 5] ปรับปรุงระบบเช็คสิทธิ์ให้รองรับ Super Admin และตรวจสอบผ่าน App Metadata เพื่อความปลอดภัย
+  // 🔐 ระบบตรวจสอบสิทธิ์แบบครอบคลุม (รองรับทั้ง Admin และ Super Admin ทุกรูปแบบ)
   useEffect(() => {
     const checkAdminStatus = async () => {
       try {
@@ -45,21 +45,48 @@ export default function Posts() {
         if (error) throw error;
 
         if (user) {
-          // ดึงค่าบทบาทจาก user_metadata และ app_metadata มาแปลงเป็นตัวพิมพ์เล็ก
-          const roleFromUserMeta = user.user_metadata?.role?.toLowerCase() || '';
-          const roleFromAppMeta = user.app_metadata?.role?.toLowerCase() || '';
+          // ฟังก์ชันตรวจสอบค่า Role ให้รองรับทั้งแบบ String และแบบ Array
+          const validateRole = (roleValue) => {
+            if (!roleValue) return false;
+            
+            // กรณีเก็บสิทธิ์เป็น String ข้อความธรรมดา (เช่น "admin", "superadmin", "super_admin")
+            if (typeof roleValue === 'string') {
+              const lower = roleValue.toLowerCase();
+              return lower.includes('admin') || lower.includes('super');
+            }
+            
+            // กรณีเก็บสิทธิ์เป็น Array (เช่น ["user", "admin"] หรือ ["superadmin"])
+            if (Array.isArray(roleValue)) {
+              return roleValue.some(role => 
+                typeof role === 'string' && 
+                (role.toLowerCase().includes('admin') || role.toLowerCase().includes('super'))
+              );
+            }
+            
+            return false;
+          };
+
+          const userMeta = user.user_metadata || {};
+          const appMeta = user.app_metadata || {};
           const userEmail = user.email?.toLowerCase() || '';
           
-          // เงื่อนไข: สิทธิ์ผ่านถ้ามีคำว่า 'admin' อยู่ในบทบาท หรือเป็นอีเมลแอดมินหลัก
-          const hasAdminRole = 
-            roleFromUserMeta.includes('admin') || 
-            roleFromAppMeta.includes('admin') || 
+          // ตรวจสอบความถูกต้องจากทุกจุดที่มีโอกาสบันทึกข้อมูลสิทธิ์ไว้
+          const hasAuthorizedRole = 
+            validateRole(userMeta.role) || 
+            validateRole(userMeta.roles) || 
+            validateRole(appMeta.role) || 
+            validateRole(appMeta.roles) || 
+            userMeta.is_admin === true ||
+            userMeta.is_superadmin === true ||
+            userMeta.is_super_admin === true ||
+            appMeta.is_admin === true ||
+            appMeta.is_superadmin === true ||
+            appMeta.is_super_admin === true ||
             userEmail === 'admin@atier.com' ||
             userEmail.includes('admin') ||
-            user.user_metadata?.is_admin === true ||
-            user.app_metadata?.is_admin === true;
+            userEmail.includes('super');
 
-          setIsAdmin(hasAdminRole);
+          setIsAdmin(hasAuthorizedRole);
         } else {
           setIsAdmin(false);
         }
@@ -252,7 +279,7 @@ export default function Posts() {
         )}
       </div>
 
-      {/* 📝 กล่องเขียนโพสต์ที่จะปรากฏเฉพาะ แอดมินและซูเปอร์แอดมิน เท่านั้น */}
+      {/* 📝 กล่องเขียนโพสต์ที่จะปรากฏสำหรับ แอดมิน และ ซูเปอร์แอดมิน เท่านั้น */}
       {isAdmin && (
         <div className="max-w-3xl mx-auto px-4 mb-12">
           <div className="bg-white dark:bg-zinc-900 border-2 border-dashed border-amber-500/30 rounded-3xl p-6 shadow-md space-y-4">
