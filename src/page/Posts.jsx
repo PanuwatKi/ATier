@@ -42,65 +42,67 @@ export default function Posts() {
   const [uploading, setUploading] = useState(false);
 
   // 🔐 ระบบตรวจสอบสิทธิ์ครอบคลุมทุกช่องทาง
+  // 🔐 ระบบตรวจสอบสิทธิ์แบบ Real-time ปลอดภัยและรัดกุมสูงสุด
   useEffect(() => {
-    const checkAdminStatus = async () => {
-      try {
-        const { data: { user }, error } = await supabase.auth.getUser();
-        if (error) throw error;
+    const evaluateAdminStatus = (user) => {
+      if (!user) return devBypass;
 
-        if (user) {
-          // 📢 พิมพ์ Log ออกมาดูเพื่อตรวจสอบความถูกต้องของสิทธิ์ในบัญชีนี้
-          console.group("⚙️ [ATier Auth Debugger]");
-          console.log("User Email:", user.email);
-          console.log("User Metadata (จาก Google/OAuth):", user.user_metadata);
-          console.log("App Metadata (จากระบบหลังบ้าน):", user.app_metadata);
-          console.groupEnd();
-
-          // ฟังก์ชันช่วยตรวจสอบสิทธิ์ในกรณีที่บันทึกมาเป็น Array หรือ String
-          const validateRole = (roleValue) => {
-            if (!roleValue) return false;
-            if (typeof roleValue === 'string') {
-              const lower = roleValue.toLowerCase();
-              return lower.includes('admin') || lower.includes('super');
-            }
-            if (Array.isArray(roleValue)) {
-              return roleValue.some(role => 
-                typeof role === 'string' && 
-                (role.toLowerCase().includes('admin') || role.toLowerCase().includes('super'))
-              );
-            }
-            return false;
-          };
-
-          const userMeta = user.user_metadata || {};
-          const appMeta = user.app_metadata || {};
-          const userEmail = user.email?.toLowerCase() || '';
-          
-          const hasAuthorizedRole = 
-            validateRole(userMeta.role) || 
-            validateRole(userMeta.roles) || 
-            validateRole(appMeta.role) || 
-            validateRole(appMeta.roles) || 
-            userMeta.is_admin === true ||
-            userMeta.is_superadmin === true ||
-            appMeta.is_admin === true ||
-            appMeta.is_superadmin === true ||
-            userEmail === 'admin@atier.com' ||
-            userEmail.includes('admin') ||
-            userEmail.includes('super');
-
-          // ถ้าเปิด Dev Bypass ไว้ หรือมีสิทธิ์จริง ให้ถือว่าเป็น Admin
-          setIsAdmin(hasAuthorizedRole || devBypass);
-        } else {
-          setIsAdmin(devBypass);
+      // ตรวจสอบสิทธิ์จาก metadata อย่างละเอียด
+      const validateRole = (roleValue) => {
+        if (!roleValue) return false;
+        if (typeof roleValue === 'string') {
+          const lower = roleValue.toLowerCase();
+          return lower === 'admin' || lower === 'superadmin' || lower === 'super admin';
         }
-      } catch (err) {
-        console.error("Error checking admin status:", err.message);
-        setIsAdmin(devBypass);
-      }
+        if (Array.isArray(roleValue)) {
+          return roleValue.some(role => 
+            typeof role === 'string' && 
+            ['admin', 'superadmin', 'super admin'].includes(role.toLowerCase())
+          );
+        }
+        return false;
+      };
+
+      const userMeta = user.user_metadata || {};
+      const appMeta = user.app_metadata || {};
+      const userEmail = user.email?.toLowerCase() || '';
+      
+      console.group("⚙️ [ATier Auth Debugger]");
+      console.log("User Email:", userEmail);
+      console.log("User Metadata:", userMeta);
+      console.log("App Metadata:", appMeta);
+      console.groupEnd();
+
+      // เช็คสิทธิ์แบบตรงตัว (เอา .includes ออกเพื่อไม่ให้ผู้ใช้ทั่วไปที่ตั้งชื่ออีเมลติดคำว่า admin แอบเข้าถึงได้)
+      const hasAuthorizedRole = 
+        validateRole(userMeta.role) || 
+        validateRole(userMeta.roles) || 
+        validateRole(appMeta.role) || 
+        validateRole(appMeta.roles) || 
+        userMeta.is_admin === true ||
+        userMeta.is_superadmin === true ||
+        appMeta.is_admin === true ||
+        appMeta.is_superadmin === true ||
+        userEmail === 'admin@atier.com'; // กำหนดเฉพาะอีเมลแอดมินหลักที่เจาะจงเท่านั้น
+
+      return hasAuthorizedRole || devBypass;
     };
-    checkAdminStatus();
-  }, [devBypass]); // อัปเดตสิทธิ์ทันทีเมื่อกดปุ่มสลับ Dev Bypass
+
+    // 🔄 ใช้ Auth Listener ดักจับการเปลี่ยนแปลงสิทธิ์ข้ามบัญชีทันทีโดยไม่ต้องรีเฟรชหน้าเว็บ
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const currentUser = session?.user || null;
+      setIsAdmin(evaluateAdminStatus(currentUser));
+    });
+
+    // เรียกตรวจสอบครั้งแรกเมื่อคอมโพเนนต์เรนเดอร์สำเร็จ
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setIsAdmin(evaluateAdminStatus(user));
+    });
+
+    return () => {
+      if (subscription) subscription.unsubscribe();
+    };
+  }, [devBypass]);
 
   // 🔄 ดึงข้อมูลและเชื่อมต่อระบบ Real-time Sync ข้ามเครื่อง
   const fetchPosts = async () => {
@@ -409,7 +411,12 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
       if (!viewedHistory.includes(post.id)) {
         viewedHistory.push(post.id);
         sessionStorage.setItem('atier_viewed_chronicles', JSON.stringify(viewedHistory));
-        await supabase.from('posts').update({ views: (post.views || 0) + 1 }).eq('id', post.id);
+        
+        // 🔄 เปลี่ยนจาก .update() มาใช้ RPC เพื่อไม่ให้ติดบล็อกจาก RLS Policy ของผู้ใช้ทั่วไป
+        await supabase.rpc('increment_view_secure', { 
+          post_id_param: post.id, 
+          updated_views: (post.views || 0) + 1 
+        });
       }
     };
     triggerViewIncrement();
