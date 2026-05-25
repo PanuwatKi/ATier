@@ -18,7 +18,7 @@ import {
   Trash2,
   Wrench
 } from 'lucide-react';
-// 🔒 [🔐 ปรับปรุง] นำเข้า Authระบบส่วนกลางที่ปลอดภัยและผ่านการ Verify จาก DB แล้วแบบเดียวกับ Courses.jsx
+// 🔒 นำเข้า Authระบบส่วนกลางที่ปลอดภัยและผ่านการ Verify จาก DB แล้ว
 import { useAuth } from '../context/AuthContext';
 // 🔌 นำเข้า supabase client
 import { supabase } from '../supabaseClient';
@@ -28,8 +28,8 @@ export default function Posts() {
   const [loading, setLoading] = useState(true);
   const [likedPosts, setLikedPosts] = useState({});
   
-  // 🛠️ Dev Mode Mode Override (สำหรับทดสอบหน้าตา UI แอดมินได้ทันทีบน Localhost)
-  const [devBypass, setDevBypass] = useState(false);
+  // 🔄 State ควบคุมโหมดมุมมองแอดมิน (สามารถสลับไปมาระหว่างมุมมองแอดมินกับคนทั่วไปได้)
+  const [isAdminModeActive, setIsAdminModeActive] = useState(false);
 
   // Form States สำหรับ Admin เขียนโพสต์
   const [newTitle, setNewTitle] = useState('');
@@ -42,14 +42,29 @@ export default function Posts() {
   const [newTags, setNewTags] = useState('');
   const [uploading, setUploading] = useState(false);
 
-  // 🔒 [🔐 อัปเดตระสิทธิ์ใหม่] ดึงค่าสถานะสิทธิ์จากระบบกลางแบบ Single Source of Truth
+  // 🔒 ดึงค่าสถานะสิทธิ์จากระบบกลางแบบ Single Source of Truth
   const { user, role } = useAuth();
   
-  // 🔐 พิจารณาสิทธิ์แอดมินจริงจากฐานข้อมูลหลังบ้าน (อิงตามมาตรฐานเงื่อนไขตารางโปรไฟล์ของหน้า Courses.jsx)
+  // 🔐 ตรวจสอบว่าบัญชีนี้มีสิทธิ์ระดับแอดมินในระบบจริงหรือไม่
   const isRealAdmin = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin';
-  
-  // เปิดสิทธิ์ควบคุมโพสต์เมื่อเป็นแอดมินตัวจริง หรือเปิดปุ่มทดสอบสิทธิ์ (Dev Bypass)
-  const isAdmin = isRealAdmin || devBypass;
+
+  // 🔄 เมื่อสิทธิ์ในฐานข้อมูลโหลดมาเสร็จ ถ้าเป็นแอดมินจริง ให้เปิดโหมดแอดมินเริ่มต้นไว้ก่อน
+  useEffect(() => {
+    if (isRealAdmin) {
+      setIsAdminModeActive(true);
+    } else {
+      setIsAdminModeActive(false);
+    }
+  }, [role, isRealAdmin]);
+
+  // 🛡️ ตัวแปรตัดสินสุดท้ายในการแสดงผล UI ของหน้าโพสต์ (อ้างอิงตามโหมดที่เลือกสลับ)
+  const isAdmin = isRealAdmin && isAdminModeActive;
+
+  // ตรวจสอบว่าเป็นเครื่อง Localhost หรือไม่ เพื่อแสดงแผงควบคุมโหมดการจำลองด้านล่าง
+  const isLocalDev = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' || 
+    window.location.hostname === '127.0.0.1'
+  );
 
   // 🔄 ดึงข้อมูลและเชื่อมต่อระบบ Real-time Sync ข้ามเครื่อง
   const fetchPosts = async () => {
@@ -147,7 +162,7 @@ export default function Posts() {
       setNewTags(''); setImageFile(null); setAttachmentFile(null);
       alert("🎉 เผยแพร่บทความใหม่สำเร็จและอัปเดตไปยังทุกเครื่องแล้ว!");
     } catch (err) {
-      alert(`❌ อัปโหลดล้มเหลว: ${err.message}\n(หมายเหตุ: หากใช้ปุ่มจำลองสิทธิ์ตรวจสอบให้มั่นใจว่าได้เปิดสิทธิ์ RLS ให้ตัวตนจริงของคุณเขียนข้อมูลลง Table และ Storage แล้ว)`);
+      alert(`❌ อัปโหลดล้มเหลว: ${err.message}`);
     } finally {
       setUploading(false);
     }
@@ -168,7 +183,6 @@ export default function Posts() {
   const handleAddComment = async (postId, existingComments, text) => {
     if (!text.trim()) return;
     
-    // 🚀 [🔐 ประสิทธิภาพ] ดึงชื่อแอดมินหรือผู้ใช้จาก Object user ของ AuthContext ได้เลยโดยตรง ไม่ต้อง await ยิงขอบริการใหม่
     const commentatorName = user?.user_metadata?.full_name || user?.email || "Anonymous Student";
     const newCommentObj = {
       id: `comment-${Date.now()}`,
@@ -202,11 +216,6 @@ export default function Posts() {
     );
   }
 
-  const isLocalDev = typeof window !== 'undefined' && (
-    window.location.hostname === 'localhost' || 
-    window.location.hostname === '127.0.0.1'
-  );
-
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-50 py-12 transition-colors duration-200 pb-24">
       
@@ -222,7 +231,7 @@ export default function Posts() {
         </div>
         {isAdmin && (
           <div className="bg-amber-500/10 border border-amber-500/30 text-amber-500 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 animate-pulse">
-            <Shield className="w-3.5 h-3.5" /> แอดมินคอนโทรลรูม {devBypass && "(จำลองสถานะ)"}
+            <Shield className="w-3.5 h-3.5" /> แอดมินคอนโทรลรูม (Active)
           </div>
         )}
       </div>
@@ -421,7 +430,7 @@ export default function Posts() {
                   </div>
                 ))}
 
-                {/* ฟอร์มพิมพ์คอมเมนต์แยกเดี่ยวอิสระ (แก้บัก Text ทับซ้อนข้ามโพสต์) */}
+                {/* ฟอร์มพิมพ์คอมเมนต์แยกเดี่ยวอิสระ */}
                 {post.is_discuss_enabled ? (
                   <CommentForm post={post} handleAddComment={handleAddComment} />
                 ) : (
@@ -436,21 +445,21 @@ export default function Posts() {
         })}
       </div>
 
-      {/* 🛠️ สวิตช์เปิดปิดจำลองสิทธิ์แอดมินสำหรับ Local Development */}
-      {isLocalDev && (
+      {/* 🛠️ สวิตช์สลับโหมดจำลองสิทธิ์แอดมิน / คนใช้งานทั่วไป (เฉพาะในบัญชีแอดมินจริงเท่านั้น) */}
+      {isRealAdmin && (
         <div className="fixed bottom-4 left-4 z-50 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 p-3 rounded-2xl shadow-lg flex items-center gap-3">
           <Wrench className="w-4 h-4 text-amber-500" />
           <div className="flex flex-col">
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Dev Bypass Mode</span>
+            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">โหมดจำลองมุมมอง</span>
             <span className="text-xs font-semibold text-slate-600 dark:text-zinc-300">
-              สถานะ: {isRealAdmin ? "แอดมินจริง (ฐานข้อมูล)" : "ผู้เรียนทั่วไป"}
+              {isAdminModeActive ? "👁️ กำลังดูแบบ: แอดมิน" : "👤 กำลังดูแบบ: ผู้เรียนทั่วไป"}
             </span>
           </div>
           <button 
-            onClick={() => setDevBypass(!devBypass)}
+            onClick={() => setIsAdminModeActive(!isAdminModeActive)}
             className="focus:outline-none cursor-pointer"
           >
-            {devBypass ? <ToggleRight className="w-7 h-7 text-amber-500" /> : <ToggleLeft className="w-7 h-7 text-zinc-500" />}
+            {isAdminModeActive ? <ToggleRight className="w-7 h-7 text-amber-500" /> : <ToggleLeft className="w-7 h-7 text-zinc-500" />}
           </button>
         </div>
       )}
@@ -459,7 +468,7 @@ export default function Posts() {
   );
 }
 
-// 🧩 [🛠️ แยกส่วนเพิ่มเติม] คอมโพเนนต์ฟอร์มกรอกความคิดเห็นอิสระ เพื่อให้แต่ละโพสต์พิมพ์แยกกันได้โดยไม่ชนกันเอง
+// 🧩 คอมโพเนนต์ฟอร์มกรอกความคิดเห็นอิสระ
 function CommentForm({ post, handleAddComment }) {
   const [text, setText] = useState('');
   return (
