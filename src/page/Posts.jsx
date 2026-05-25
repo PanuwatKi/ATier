@@ -233,7 +233,7 @@ export default function Posts() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 flex items-center justify-center text-zinc-400">
-        <div className="animate-pulse font-mono">กำลังเชื่อมโยง Chronicle เรียลไทม์...</div>
+        <div className="animate-pulse font-mono">กำลังเชื่อมโยง Chronicle เรียลไทม์... ถ้านานเกินไปให้ลองเข้า atier-rouge.vercel.app แล้วลองอีกครั้งนะครับ...</div>
       </div>
     );
   }

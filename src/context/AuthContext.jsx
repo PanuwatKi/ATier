@@ -5,7 +5,7 @@ const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null); // ✨ เพิ่มสเตทสำหรับเก็บสิทธิ์ผู้ใช้
+  const [role, setRole] = useState(null); // ✨ สเตทสำหรับเก็บสิทธิ์ผู้ใช้
   const [loading, setLoading] = useState(true);
 
   // 🔍 ฟังก์ชันดึงค่าสิทธิ์ (role) จากตาราง public.profiles ข้ามตาราง
@@ -28,31 +28,47 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     // 1. ตรวจสอบ Session ปัจจุบันเมื่อเปิดเว็บขึ้นมาครั้งแรก
     const initializeAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      
-      if (currentUser) {
-        await fetchUserRole(currentUser.id); // ดึงสิทธิ์มาเก็บก่อนปิด Loading
-      } else {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) throw error;
+
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+        
+        if (currentUser) {
+          await fetchUserRole(currentUser.id); // ดึงสิทธิ์มาเก็บก่อนปิด Loading
+        } else {
+          setRole(null);
+        }
+      } catch (err) {
+        console.error("❌ Auth Initialization Error:", err.message);
+        setUser(null);
         setRole(null);
+      } finally {
+        // 🌟 ปิดหน้าจอโหลดแน่นอน 100% ไม่ว่าจะโหลดสำเร็จหรือเกิด Error
+        setLoading(false); 
       }
-      setLoading(false);
     };
 
     initializeAuth();
 
-    // 2. เฝ้าติดตามการเปลี่ยนแปลงสถานะระบบ (เช่น มีการ Login หรือ Logout)
+    // 2. เฝ้าติดตามการเปลี่ยนแปลงสถานะระบบ (เช่น มีการ Login, Logout หรือ Background Token Refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      
-      if (currentUser) {
-        await fetchUserRole(currentUser.id); // ดึงสิทธิ์ใหม่ทันทีที่ล็อกอินสำเร็จ
-      } else {
-        setRole(null); // ล้างสิทธิ์เมื่อออกจากระบบ
+      try {
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+        
+        if (currentUser) {
+          await fetchUserRole(currentUser.id); // ดึงสิทธิ์ใหม่ทันทีที่ล็อกอินสำเร็จ
+        } else {
+          setRole(null); // ล้างสิทธิ์เมื่อออกจากระบบ
+        }
+      } catch (err) {
+        console.error("❌ Auth State Change Error:", err.message);
+      } finally {
+        // 🌟 มั่นใจว่าสเตทโหลดจะถูกเคลียร์ออกเมื่อระบบ Auth ทำงานเบื้องหลังเสร็จสิ้น
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -104,7 +120,10 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={value}>
       {loading ? (
         <div className="flex min-h-screen items-center justify-center bg-white dark:bg-gray-900 text-gray-500">
-          <p className="animate-pulse font-medium">Loading... ถ้าหากนานเกินไปให้ไปที่ atier-rouge.vercel.app แทนนะครับ</p>
+          <div className="text-center space-y-2">
+            {/* ใส่ไอคอนหมุน/เอฟเฟกต์ pulse ให้นุ่มนวลขึ้น */}
+            <p className="animate-pulse font-medium text-sm">กำลังตรวจสอบสิทธิ์เข้าใช้งานระบบ โปรดรอสักครู่...</p>
+          </div>
         </div>
       ) : (
         children
