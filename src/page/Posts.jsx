@@ -18,7 +18,6 @@ import {
   Trash2,
   Wrench
 } from 'lucide-react';
-// 🔌 นำเข้า supabase client
 import { supabase } from '../supabaseClient'; 
 
 export default function Posts() {
@@ -26,8 +25,8 @@ export default function Posts() {
   const [loading, setLoading] = useState(true);
   
   // 🔐 ระบบจัดการสิทธิ์และมุมมอง (แยก Real Auth กับ UI View ออกจากกัน)
-  const [isRealAdmin, setIsRealAdmin] = useState(false); // ตรวจสอบว่าไอดีนี้มีสิทธิ์ Admin ในระบบจริงไหม
-  const [isAdminModeActive, setIsAdminModeActive] = useState(false); // สวิตช์สลับมุมมองหน้าจอระหว่าง Admin / General User
+  const [isRealAdmin, setIsRealAdmin] = useState(false); 
+  const [isAdminModeActive, setIsAdminModeActive] = useState(false); 
 
   const [likedPosts, setLikedPosts] = useState({});
 
@@ -42,7 +41,7 @@ export default function Posts() {
   const [newTags, setNewTags] = useState('');
   const [uploading, setUploading] = useState(false);
 
-  // 🌐 ตรวจสอบสภาพแวดล้อมเพื่อความสะดวกในการพัฒนา (Localhost)
+  // 🌐 ตรวจสอบสภาพแวดล้อม localhost
   const isLocalDev = typeof window !== 'undefined' && (
     window.location.hostname === 'localhost' || 
     window.location.hostname === '127.0.0.1'
@@ -87,10 +86,8 @@ export default function Posts() {
         appMeta.is_superadmin === true ||
         userEmail === 'admin@atier.com';
 
-      // บันทึกสิทธิ์จริงของบัญชีนี้ไว้ในระบบ
       setIsRealAdmin(hasAuthorizedRole);
       
-      // ตั้งค่าเริ่มต้น: ถ้าเป็นแอดมินจริงหรืออยู่ในเครื่อง Local ให้เปิดโหมดแอดมินไว้ก่อน
       if (hasAuthorizedRole || isLocalDev) {
         setIsAdminModeActive(true);
       }
@@ -109,7 +106,7 @@ export default function Posts() {
     };
   }, [isLocalDev]);
 
-  // 🛡️ ตัวแปรตัดสินสุดท้ายในการแสดงผล UI บนหน้าเว็บ (เปิดสิทธิ์ต่อเมื่อเข้าเงื่อนไขสวิตช์เปิดอยู่)
+  // 🛡️ ตัวแปรตัดสินสุดท้ายในการแสดงผล UI บนหน้าเว็บ
   const isAdmin = (isRealAdmin || isLocalDev) && isAdminModeActive;
 
   // 🔄 ดึงข้อมูลและเชื่อมต่อระบบ Real-time Sync
@@ -163,6 +160,10 @@ export default function Posts() {
   // 📝 ฟังก์ชันสร้างโพสต์ใหม่ลงฐานข้อมูล
   const handleCreatePost = async (e) => {
     e.preventDefault();
+    if (!isAdmin) {
+      alert("❌ ปฏิเสธการทำงาน: คุณไม่มีสิทธิ์เข้าถึงฟังก์ชันนี้");
+      return;
+    }
     if (!newTitle || !newSummary || !newContent) return;
 
     setUploading(true);
@@ -208,7 +209,7 @@ export default function Posts() {
       setNewTags(''); setImageFile(null); setAttachmentFile(null);
       alert("🎉 เผยแพร่บทความใหม่สำเร็จและอัปเดตไปยังทุกเครื่องแล้ว!");
     } catch (err) {
-      alert(`❌ อัปโหลดล้มเหลว: ${err.message}\n\n💡 วิธีแก้ไข: ปัญหานี้เกิดจากสิทธิ์ระดับฐานข้อมูล (RLS Policy) ให้ไปที่ Supabase Dashboard > Database > Policies แล้วตรวจสอบให้มั่นใจว่าเทเบิล 'posts' และ bucket 'post-assets' อนุญาตให้บัญชีที่คุณกำลังล็อกอินใช้งานมีสิทธิ์ INSERT / WRITE ข้อมูลได้ครับ`);
+      alert(`❌ อัปโหลดล้มเหลว: ${err.message}\n\n💡 คำแนะนำ: ตรวจสอบ RLS Policy ของตาราง 'posts' บน Supabase`);
     } finally {
       setUploading(false);
     }
@@ -243,13 +244,42 @@ export default function Posts() {
     });
   };
 
+  // 🛡️ เพิ่มความปลอดภัยชั้น Frontend และเพิ่มระบบจัดการ Error แจ้งแอดมิน
   const togglePostSetting = async (postId, column, currentValue) => {
-    await supabase.from('posts').update({ [column]: !currentValue }).eq('id', postId);
+    if (!isAdmin) {
+      alert("❌ คุณไม่มีสิทธิ์แก้ไขการตั้งค่าโพสต์นี้");
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from('posts')
+        .update({ [column]: !currentValue })
+        .eq('id', postId);
+      
+      if (error) throw error;
+    } catch (err) {
+      alert(`❌ ไม่สามารถอัปเดตสิทธิ์ได้: ${err.message}`);
+    }
   };
 
+  // 🛡️ เพิ่มความปลอดภัยชั้น Frontend และเพิ่มระบบจัดการ Error แจ้งแอดมิน
   const handleDeletePost = async (postId) => {
+    if (!isAdmin) {
+      alert("❌ คุณไม่มีสิทธิ์ลบโพสต์นี้");
+      return;
+    }
     if (window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบโพสต์นี้ถาวร?")) {
-      await supabase.from('posts').delete().eq('id', postId);
+      try {
+        const { error } = await supabase
+          .from('posts')
+          .delete()
+          .eq('id', postId);
+        
+        if (error) throw error;
+        alert("🗑️ ลบโพสต์ออกจากระบบ Chronicle สำเร็จ");
+      } catch (err) {
+        alert(`❌ ลบโพสต์ล้มเหลว: ${err.message}`);
+      }
     }
   };
 
@@ -384,7 +414,7 @@ export default function Posts() {
         )}
       </div>
 
-      {/* 🛠️ DEV MODE FLOATING PANEL: ปุ่มสลับโหมดจำลองสิทธิ์ที่ควบคุม UI ได้จริง */}
+      {/* 🛠️ DEV MODE FLOATING PANEL */}
       {(isLocalDev || isRealAdmin) && (
         <div className="fixed bottom-4 right-4 z-50 bg-zinc-900 border border-zinc-800 p-3 rounded-2xl shadow-xl flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
@@ -407,6 +437,7 @@ export default function Posts() {
   );
 }
 
+// 📦 ย้ายออกจาก Posts Component เพื่อป้องกันปัญหา State Reset และปิดปีกกาซ้อนผิดพลาด
 function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, togglePostSetting, handleDeletePost }) {
   const isCurrentPostLiked = likedPosts[post.id];
   const [showDiscussSection, setShowDiscussSection] = useState(false);
