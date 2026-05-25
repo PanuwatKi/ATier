@@ -25,6 +25,7 @@ export default function Posts() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false); // ควบคุมการเข้าถึงปุ่มสำหรับ Admin และ Super Admin
+  const [isRealAdmin, setIsRealAdmin] = useState(false); // ใช้ล็อกตัวปุ่ม Dev Bypass ให้เห็นเฉพาะแอดมินจริง
   const [likedPosts, setLikedPosts] = useState({});
   
   // 🛠️ Dev Mode Mode Override (สำหรับทดสอบหน้าตา UI แอดมินได้ทันที)
@@ -41,11 +42,13 @@ export default function Posts() {
   const [newTags, setNewTags] = useState('');
   const [uploading, setUploading] = useState(false);
 
-  // 🔐 ระบบตรวจสอบสิทธิ์ครอบคลุมทุกช่องทาง
   // 🔐 ระบบตรวจสอบสิทธิ์แบบ Real-time ปลอดภัยและรัดกุมสูงสุด
   useEffect(() => {
     const evaluateAdminStatus = (user) => {
-      if (!user) return devBypass;
+      if (!user) {
+        setIsRealAdmin(false);
+        return devBypass;
+      }
 
       // ตรวจสอบสิทธิ์จาก metadata อย่างละเอียด
       const validateRole = (roleValue) => {
@@ -73,7 +76,7 @@ export default function Posts() {
       console.log("App Metadata:", appMeta);
       console.groupEnd();
 
-      // เช็คสิทธิ์แบบตรงตัว (เอา .includes ออกเพื่อไม่ให้ผู้ใช้ทั่วไปที่ตั้งชื่ออีเมลติดคำว่า admin แอบเข้าถึงได้)
+      // เช็คสิทธิ์แบบตรงตัวป้องกันการแอบอ้างสิทธิ์
       const hasAuthorizedRole = 
         validateRole(userMeta.role) || 
         validateRole(userMeta.roles) || 
@@ -85,6 +88,7 @@ export default function Posts() {
         appMeta.is_superadmin === true ||
         userEmail === 'admin@atier.com'; // กำหนดเฉพาะอีเมลแอดมินหลักที่เจาะจงเท่านั้น
 
+      setIsRealAdmin(hasAuthorizedRole);
       return hasAuthorizedRole || devBypass;
     };
 
@@ -207,35 +211,35 @@ export default function Posts() {
   };
 
   const handleLike = async (post) => {
-  const alreadyLiked = likedPosts[post.id];
-  const updatedLikes = alreadyLiked ? Math.max(0, post.likes - 1) : post.likes + 1;
-  setLikedPosts(prev => ({ ...prev, [post.id]: !alreadyLiked }));
-  
-  // 🔄 เปลี่ยนจาก .update() มาใช้ RPC เพื่อความปลอดภัย
-  await supabase.rpc('increment_like_secure', { 
-    post_id_param: post.id, 
-    updated_likes: updatedLikes 
-  });
-};
+    const alreadyLiked = likedPosts[post.id];
+    const updatedLikes = alreadyLiked ? Math.max(0, post.likes - 1) : post.likes + 1;
+    setLikedPosts(prev => ({ ...prev, [post.id]: !alreadyLiked }));
+    
+    // 🔄 เปลี่ยนจาก .update() มาใช้ RPC เพื่อความปลอดภัย
+    await supabase.rpc('increment_like_secure', { 
+      post_id_param: post.id, 
+      updated_likes: updatedLikes 
+    });
+  };
 
   const handleAddComment = async (postId, existingComments, text) => {
-  if (!text.trim()) return;
-  const { data: { user } } = await supabase.auth.getUser();
-  const commentatorName = user?.user_metadata?.full_name || user?.email || "Anonymous Student";
-  const newCommentObj = {
-    id: `comment-${Date.now()}`,
-    author: commentatorName,
-    text: text,
-    date: "Just now"
+    if (!text.trim()) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    const commentatorName = user?.user_metadata?.full_name || user?.email || "Anonymous Student";
+    const newCommentObj = {
+      id: `comment-${Date.now()}`,
+      author: commentatorName,
+      text: text,
+      date: "Just now"
+    };
+    const updatedComments = [...(existingComments || []), newCommentObj];
+    
+    // 🔄 เปลี่ยนจาก .update() มาใช้ RPC เพื่อความปลอดภัยเช่นกัน
+    await supabase.rpc('add_comment_secure', { 
+      post_id_param: postId, 
+      updated_comments: updatedComments 
+    });
   };
-  const updatedComments = [...(existingComments || []), newCommentObj];
-  
-  // 🔄 เปลี่ยนจาก .update() มาใช้ RPC เพื่อความปลอดภัยเช่นกัน
-  await supabase.rpc('add_comment_secure', { 
-    post_id_param: postId, 
-    updated_comments: updatedComments 
-  });
-};
 
   const togglePostSetting = async (postId, column, currentValue) => {
     await supabase.from('posts').update({ [column]: !currentValue }).eq('id', postId);
@@ -378,23 +382,25 @@ export default function Posts() {
         )}
       </div>
 
-      {/* 🛠️ DEV MODE FLOATING PANEL: ปุ่มลัดเปิดแอดมินสำหรับทดสอบระบบ Front-end */}
-      <div className="fixed bottom-4 right-4 z-50 bg-zinc-900 border border-zinc-800 p-3 rounded-2xl shadow-xl flex items-center gap-3">
-        <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
-          <Wrench className="w-3.5 h-3.5 animate-spin" />
-          <span>Dev Bypass:</span>
+      {/* 🛠️ DEV MODE FLOATING PANEL: ปรับปรุงความปลอดภัย ให้แสดงผลเฉพาะแอดมินหลังบ้านตัวจริงเท่านั้น */}
+      {isRealAdmin && (
+        <div className="fixed bottom-4 right-4 z-50 bg-zinc-900 border border-zinc-800 p-3 rounded-2xl shadow-xl flex items-center gap-3">
+          <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
+            <Wrench className="w-3.5 h-3.5 animate-spin" />
+            <span>Dev Bypass:</span>
+          </div>
+          <button 
+            onClick={() => setDevBypass(!devBypass)}
+            className={`px-3 py-1 text-[11px] font-extrabold rounded-xl transition-all ${
+              devBypass 
+                ? 'bg-amber-500 text-black shadow-inner' 
+                : 'bg-zinc-800 text-zinc-400 hover:text-white'
+            }`}
+          >
+            {devBypass ? "ACTIVE (แอดมินเปิด)" : "INACTIVE (ปิด)"}
+          </button>
         </div>
-        <button 
-          onClick={() => setDevBypass(!devBypass)}
-          className={`px-3 py-1 text-[11px] font-extrabold rounded-xl transition-all ${
-            devBypass 
-              ? 'bg-amber-500 text-black shadow-inner' 
-              : 'bg-zinc-800 text-zinc-400 hover:text-white'
-          }`}
-        >
-          {devBypass ? "ACTIVE (แอดมินเปิด)" : "INACTIVE (ปิด)"}
-        </button>
-      </div>
+      )}
 
     </div>
   );
