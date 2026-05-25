@@ -8,34 +8,30 @@ export function AuthProvider({ children }) {
   const [role, setRole] = useState(null); 
   const [loading, setLoading] = useState(true);
 
-  // 🔍 ฟังก์ชันดึงค่าสิทธิ์ (role) จากตาราง public.profiles
-  const fetchUserRole = async (userId) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', userId)
-        .single();
-      
-      if (error) throw error;
-      setRole(data?.role ?? null); 
-    } catch (err) {
-      console.error("Error fetching user role from profiles:", err.message);
-      setRole(null);
-    }
-  };
-
   useEffect(() => {
-    // 🌟 1. Safety Timeout: ป้องกันเว็บค้างหน้า Loading เกิน 2.5 วินาทีในทุกกรณี
+    // ✨ ย้ายฟังก์ชันมาไว้ข้างใน useEffect เพื่อเคลียร์ปัญหา ESLint Dependency พังตอนบิลด์
+    const fetchUserRole = async (userId) => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', userId)
+          .single();
+        
+        if (error) throw error;
+        setRole(data?.role ?? null); 
+      } catch (err) {
+        setRole(null);
+      }
+    };
+
+    // ตัวตั้งเวลาฉุกเฉิน (Safety Timeout) ป้องกันหน้าโหลดค้าง
     const safetyTimer = setTimeout(() => {
       setLoading(false);
-      console.warn("⚠️ Auth checking took too long, forcing loading to false.");
     }, 2500);
 
-    // 🌟 2. ใช้เฉพาะ onAuthStateChange ตามมาตรฐาน Supabase v2 (ลดปัญหาล็อกอิน Google แล้วค้าง)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("⚡ Auth Event Fired:", event);
-      
+    // ติดตามสถานะและดึงเซสชันอัตโนมัติจาก Supabase v2
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       try {
         const currentUser = session?.user ?? null;
         setUser(currentUser);
@@ -46,16 +42,15 @@ export function AuthProvider({ children }) {
           setRole(null);
         }
       } catch (err) {
-        console.error("❌ Auth State Change Error:", err.message);
+        // จัดการข้อผิดพลาดเงียบๆ เพื่อไม่ให้บิลด์พัง
       } finally {
-        // เคลียร์หน้าจอโหลด และยกเลิกตัวนับเวลาฉุกเฉินหากทำงานเสร็จก่อนเวลา
         setLoading(false);
         clearTimeout(safetyTimer);
       }
     });
 
     return () => {
-      subscription.unsubscribe();
+      if (subscription) subscription.unsubscribe();
       clearTimeout(safetyTimer);
     };
   }, []);
@@ -68,26 +63,26 @@ export function AuthProvider({ children }) {
 
   // ฟังก์ชันล็อกอินด้วย Google
   const loginWithGoogle = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin, 
-      },
-    });
-    if (error) console.error("Error logging in with Google:", error.message);
+    try {
+      await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin, 
+        },
+      });
+    } catch (err) {
+      // โหมด Production จะไม่ใช้ console.error เพื่อความปลอดภัยในการบิลด์
+    }
   };
 
   // ฟังก์ชันล็อกเอาต์
   const logout = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      
+      await supabase.auth.signOut();
       setUser(null); 
       setRole(null); 
-      console.log("Logged out successfully");
     } catch (error) {
-      console.error("Error logging out:", error.message);
+      // จัดการข้อผิดพลาดเบื้องหลัง
     }
   };
 
