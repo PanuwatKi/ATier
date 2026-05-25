@@ -15,7 +15,8 @@ import {
   Download,
   ToggleLeft,
   ToggleRight,
-  Trash2
+  Trash2,
+  Wrench
 } from 'lucide-react';
 // 🔌 นำเข้า supabase client
 import { supabase } from '../supabaseClient'; 
@@ -25,6 +26,9 @@ export default function Posts() {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false); // ควบคุมการเข้าถึงปุ่มสำหรับ Admin และ Super Admin
   const [likedPosts, setLikedPosts] = useState({});
+  
+  // 🛠️ Dev Mode Mode Override (สำหรับทดสอบหน้าตา UI แอดมินได้ทันที)
+  const [devBypass, setDevBypass] = useState(false);
 
   // Form States สำหรับ Admin เขียนโพสต์
   const [newTitle, setNewTitle] = useState('');
@@ -37,7 +41,7 @@ export default function Posts() {
   const [newTags, setNewTags] = useState('');
   const [uploading, setUploading] = useState(false);
 
-  // 🔐 ระบบตรวจสอบสิทธิ์แบบครอบคลุม (รองรับทั้ง Admin และ Super Admin ทุกรูปแบบ)
+  // 🔐 ระบบตรวจสอบสิทธิ์ครอบคลุมทุกช่องทาง
   useEffect(() => {
     const checkAdminStatus = async () => {
       try {
@@ -45,24 +49,26 @@ export default function Posts() {
         if (error) throw error;
 
         if (user) {
-          // ฟังก์ชันตรวจสอบค่า Role ให้รองรับทั้งแบบ String และแบบ Array
+          // 📢 พิมพ์ Log ออกมาดูเพื่อตรวจสอบความถูกต้องของสิทธิ์ในบัญชีนี้
+          console.group("⚙️ [ATier Auth Debugger]");
+          console.log("User Email:", user.email);
+          console.log("User Metadata (จาก Google/OAuth):", user.user_metadata);
+          console.log("App Metadata (จากระบบหลังบ้าน):", user.app_metadata);
+          console.groupEnd();
+
+          // ฟังก์ชันช่วยตรวจสอบสิทธิ์ในกรณีที่บันทึกมาเป็น Array หรือ String
           const validateRole = (roleValue) => {
             if (!roleValue) return false;
-            
-            // กรณีเก็บสิทธิ์เป็น String ข้อความธรรมดา (เช่น "admin", "superadmin", "super_admin")
             if (typeof roleValue === 'string') {
               const lower = roleValue.toLowerCase();
               return lower.includes('admin') || lower.includes('super');
             }
-            
-            // กรณีเก็บสิทธิ์เป็น Array (เช่น ["user", "admin"] หรือ ["superadmin"])
             if (Array.isArray(roleValue)) {
               return roleValue.some(role => 
                 typeof role === 'string' && 
                 (role.toLowerCase().includes('admin') || role.toLowerCase().includes('super'))
               );
             }
-            
             return false;
           };
 
@@ -70,7 +76,6 @@ export default function Posts() {
           const appMeta = user.app_metadata || {};
           const userEmail = user.email?.toLowerCase() || '';
           
-          // ตรวจสอบความถูกต้องจากทุกจุดที่มีโอกาสบันทึกข้อมูลสิทธิ์ไว้
           const hasAuthorizedRole = 
             validateRole(userMeta.role) || 
             validateRole(userMeta.roles) || 
@@ -78,25 +83,24 @@ export default function Posts() {
             validateRole(appMeta.roles) || 
             userMeta.is_admin === true ||
             userMeta.is_superadmin === true ||
-            userMeta.is_super_admin === true ||
             appMeta.is_admin === true ||
             appMeta.is_superadmin === true ||
-            appMeta.is_super_admin === true ||
             userEmail === 'admin@atier.com' ||
             userEmail.includes('admin') ||
             userEmail.includes('super');
 
-          setIsAdmin(hasAuthorizedRole);
+          // ถ้าเปิด Dev Bypass ไว้ หรือมีสิทธิ์จริง ให้ถือว่าเป็น Admin
+          setIsAdmin(hasAuthorizedRole || devBypass);
         } else {
-          setIsAdmin(false);
+          setIsAdmin(devBypass);
         }
       } catch (err) {
         console.error("Error checking admin status:", err.message);
-        setIsAdmin(false);
+        setIsAdmin(devBypass);
       }
     };
     checkAdminStatus();
-  }, []);
+  }, [devBypass]); // อัปเดตสิทธิ์ทันทีเมื่อกดปุ่มสลับ Dev Bypass
 
   // 🔄 ดึงข้อมูลและเชื่อมต่อระบบ Real-time Sync ข้ามเครื่อง
   const fetchPosts = async () => {
@@ -117,7 +121,6 @@ export default function Posts() {
   useEffect(() => {
     fetchPosts();
 
-    // 📡 เปิดสัญญาณดึงข้อมูลการเปลี่ยนแปลงตาราง posts แบบ Real-time
     const postChannel = supabase
       .channel('realtime-posts-channel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
@@ -130,7 +133,7 @@ export default function Posts() {
     };
   }, []);
 
-  // 📦 ฟังก์ชันสำหรับอัปโหลดไฟล์เข้า Storage Bucket 'post-assets'
+  // 📦 ฟังก์ชันอัปโหลดไฟล์เข้า Storage Bucket 'post-assets'
   const uploadToStorage = async (file, folder) => {
     if (!file) return null;
     const fileExt = file.name.split('.').pop();
@@ -147,7 +150,7 @@ export default function Posts() {
     return { url: data.publicUrl, name: file.name };
   };
 
-  // 📝 ฟังก์ชันสร้างโพสต์ใหม่ลงฐานข้อมูลกลาง
+  // 📝 ฟังก์ชันสร้างโพสต์ใหม่ลงฐานข้อมูล
   const handleCreatePost = async (e) => {
     e.preventDefault();
     if (!newTitle || !newSummary || !newContent) return;
@@ -195,56 +198,37 @@ export default function Posts() {
       setNewTags(''); setImageFile(null); setAttachmentFile(null);
       alert("🎉 เผยแพร่บทความใหม่สำเร็จและอัปเดตไปยังทุกเครื่องแล้ว!");
     } catch (err) {
-      alert(`❌ อัปโหลดล้มเหลว: ${err.message}`);
+      alert(`❌ อัปโหลดล้มเหลว: ${err.message}\n(หมายเหตุ: หากใช้ปุ่มจำลองสิทธิ์ตรวจสอบให้มั่นใจว่าได้เปิดสิทธิ์ RLS ให้ตัวตนจริงของคุณเขียนข้อมูลลง Table และ Storage แล้ว)`);
     } finally {
       setUploading(false);
     }
   };
 
-  // ❤️ ฟังก์ชันกดไลก์แบบอัปเดตฐานข้อมูลจริง
   const handleLike = async (post) => {
     const alreadyLiked = likedPosts[post.id];
     const updatedLikes = alreadyLiked ? Math.max(0, post.likes - 1) : post.likes + 1;
-
     setLikedPosts(prev => ({ ...prev, [post.id]: !alreadyLiked }));
-
-    await supabase
-      .from('posts')
-      .update({ likes: updatedLikes })
-      .eq('id', post.id);
+    await supabase.from('posts').update({ likes: updatedLikes }).eq('id', post.id);
   };
 
-  // 💬 ฟังก์ชันส่งคอมเมนต์บันทึกลงตาราง JSONB
   const handleAddComment = async (postId, existingComments, text) => {
     if (!text.trim()) return;
-
     const { data: { user } } = await supabase.auth.getUser();
     const commentatorName = user?.user_metadata?.full_name || user?.email || "Anonymous Student";
-
     const newCommentObj = {
       id: `comment-${Date.now()}`,
       author: commentatorName,
       text: text,
       date: "Just now"
     };
-
     const updatedComments = [...(existingComments || []), newCommentObj];
-
-    await supabase
-      .from('posts')
-      .update({ comments: updatedComments })
-      .eq('id', postId);
+    await supabase.from('posts').update({ comments: updatedComments }).eq('id', postId);
   };
 
-  // ⚙️ ฟังก์ชันแอดมินเปลี่ยนสถานะเปิดปิดคอมเมนต์/ดาวน์โหลดภายหลัง
   const togglePostSetting = async (postId, column, currentValue) => {
-    await supabase
-      .from('posts')
-      .update({ [column]: !currentValue })
-      .eq('id', postId);
+    await supabase.from('posts').update({ [column]: !currentValue }).eq('id', postId);
   };
 
-  // 🗑️ ฟังก์ชันลบโพสต์
   const handleDeletePost = async (postId) => {
     if (window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบโพสต์นี้ถาวร?")) {
       await supabase.from('posts').delete().eq('id', postId);
@@ -260,9 +244,9 @@ export default function Posts() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-50 py-12 transition-colors duration-200">
+    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-50 py-12 transition-colors duration-200 pb-24">
       
-      {/* ส่วนหัวของหน้าเว็บ */}
+      {/* ส่วนหัวหน้าเว็บ */}
       <div className="max-w-3xl mx-auto px-4 mb-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <span className="text-xs font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
@@ -274,12 +258,12 @@ export default function Posts() {
         </div>
         {isAdmin && (
           <div className="bg-amber-500/10 border border-amber-500/30 text-amber-500 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 animate-pulse">
-            <Shield className="w-3.5 h-3.5" /> แอดมินคอนโทรลรูม
+            <Shield className="w-3.5 h-3.5" /> แอดมินคอนโทรลรูม {devBypass && "(จำลองสถานะ)"}
           </div>
         )}
       </div>
 
-      {/* 📝 กล่องเขียนโพสต์ที่จะปรากฏสำหรับ แอดมิน และ ซูเปอร์แอดมิน เท่านั้น */}
+      {/* 📝 ฟอร์มเขียนโพสต์สำหรับ Admin/Super Admin */}
       {isAdmin && (
         <div className="max-w-3xl mx-auto px-4 mb-12">
           <div className="bg-white dark:bg-zinc-900 border-2 border-dashed border-amber-500/30 rounded-3xl p-6 shadow-md space-y-4">
@@ -381,28 +365,41 @@ export default function Posts() {
           ))
         )}
       </div>
+
+      {/* 🛠️ DEV MODE FLOATING PANEL: ปุ่มลัดเปิดแอดมินสำหรับทดสอบระบบ Front-end */}
+      <div className="fixed bottom-4 right-4 z-50 bg-zinc-900 border border-zinc-800 p-3 rounded-2xl shadow-xl flex items-center gap-3">
+        <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
+          <Wrench className="w-3.5 h-3.5 animate-spin" />
+          <span>Dev Bypass:</span>
+        </div>
+        <button 
+          onClick={() => setDevBypass(!devBypass)}
+          className={`px-3 py-1 text-[11px] font-extrabold rounded-xl transition-all ${
+            devBypass 
+              ? 'bg-amber-500 text-black shadow-inner' 
+              : 'bg-zinc-800 text-zinc-400 hover:text-white'
+          }`}
+        >
+          {devBypass ? "ACTIVE (แอดมินเปิด)" : "INACTIVE (ปิด)"}
+        </button>
+      </div>
+
     </div>
   );
 }
 
-// 📦 ส่วนการ์ดแสดงผลบทความย่อย
 function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, togglePostSetting, handleDeletePost }) {
   const isCurrentPostLiked = likedPosts[post.id];
   const [showDiscussSection, setShowDiscussSection] = useState(false);
   const [commentInput, setCommentInput] = useState('');
 
-  // ระบบนับยอดวิวเรียลไทม์
   useEffect(() => {
     const triggerViewIncrement = async () => {
       const viewedHistory = JSON.parse(sessionStorage.getItem('atier_viewed_chronicles') || '[]');
       if (!viewedHistory.includes(post.id)) {
         viewedHistory.push(post.id);
         sessionStorage.setItem('atier_viewed_chronicles', JSON.stringify(viewedHistory));
-        
-        await supabase
-          .from('posts')
-          .update({ views: (post.views || 0) + 1 })
-          .eq('id', post.id);
+        await supabase.from('posts').update({ views: (post.views || 0) + 1 }).eq('id', post.id);
       }
     };
     triggerViewIncrement();
@@ -413,8 +410,8 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
       
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 dark:text-zinc-500 font-medium">
         <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-blue-500" /> {post.author}</span>
-          <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {new Date(post.created_at).toLocaleDateString('th-TH', {day:'numeric', month:'short', year:'numeric'})}</span>
+          <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-blue-500" /> {post.author || "System"}</span>
+          <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {post.created_at ? new Date(post.created_at).toLocaleDateString('th-TH', {day:'numeric', month:'short', year:'numeric'}) : "Just now"}</span>
         </div>
         
         <div className="flex items-center gap-2">
@@ -510,8 +507,8 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
         </div>
 
         <div className="flex items-center gap-4 text-xs text-slate-400 dark:text-zinc-500 font-medium font-mono">
-          <div className="flex items-center gap-1" title="Real-time impression counter">
-            <Eye className="w-4 h-4 text-slate-300 dark:text-zinc-700 animate-pulse" />
+          <div className="flex items-center gap-1">
+            <Eye className="w-4 h-4 text-slate-300 dark:text-zinc-700" />
             <span>{post.views || 0} views</span>
           </div>
           <Share2 className="w-4 h-4 text-slate-300 dark:text-zinc-700 hover:text-slate-500 cursor-pointer transition-colors" />
@@ -524,10 +521,10 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
           
           <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
             {(!post.comments || post.comments.length === 0) ? (
-              <p className="text-xs text-zinc-500 italic font-mono pl-1">ยังไม่มีข้อความสนทนา... มาร่วมเปิดประเด็นกันครับ!</p>
+              <p className="text-xs text-zinc-500 italic font-mono pl-1">ยังไม่มีข้อความสนทนา...</p>
             ) : (
               post.comments.map((comment, i) => (
-                <div key={comment.id || i} className="bg-white dark:bg-zinc-900 border border-slate-200/50 dark:border-zinc-800/80 p-3 rounded-xl shadow-xs">
+                <div key={comment.id || i} className="bg-white dark:bg-zinc-900 border border-slate-200/50 dark:border-zinc-800/80 p-3 rounded-xl">
                   <div className="flex justify-between items-center text-[11px] mb-1">
                     <span className="font-bold text-blue-500 dark:text-blue-400">{comment.author}</span>
                     <span className="text-zinc-500 font-mono text-[10px]">{comment.date}</span>
