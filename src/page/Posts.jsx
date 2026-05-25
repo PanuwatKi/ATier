@@ -455,7 +455,7 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
               </button>
             </div>
           )}
-          <span className="flex items-center gap-1.5 bg-slate-50 dark:bg-zinc-950 px-2.5 py-1 rounded-md text-[11px] font-semibold"><Clock className="w-3.5 h-3.5" /> out of service</span>
+          <span className="flex items-center gap-1.5 bg-slate-50 dark:bg-zinc-950 px-2.5 py-1 rounded-md text-[11px] font-semibold"><Clock className="w-3.5 h-3.5" /> Out of service</span>
         </div>
       </div>
 
