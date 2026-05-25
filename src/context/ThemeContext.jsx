@@ -1,117 +1,48 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../supabaseClient';
 
-const AuthContext = createContext();
+const ThemeContext = createContext();
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null); 
-  const [loading, setLoading] = useState(true);
+export function ThemeProvider({ children }) {
+  // 1. ดึงค่าเริ่มต้นจาก localStorage หรือเช็คจากระบบของเครื่องผู้ใช้ (System Preference)
+  const [theme, setTheme] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const savedTheme = localStorage.getItem('theme');
+      if (savedTheme) return savedTheme;
+      
+      // ถ้าไม่มีการบันทึกไว้ ให้เช็คว่าเครื่องผู้ใช้เปิดโหมดมืดอยู่หรือไม่
+      const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      return systemPrefersDark ? 'dark' : 'light';
+    }
+    return 'light';
+  });
 
+  // 2. จัดการเพิ่ม/ลบ class 'dark' ที่ <html> tag ทุกครั้งที่ธีมเปลี่ยน
   useEffect(() => {
-    // ✨ ย้ายฟังก์ชันมาไว้ข้างใน useEffect เพื่อเคลียร์ปัญหา ESLint Dependency พังตอนบิลด์
-    const fetchUserRole = async (userId) => {
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', userId)
-          .single();
-        
-        if (error) throw error;
-        setRole(data?.role ?? null); 
-      } catch (err) {
-        setRole(null);
-      }
-    };
-
-    // ตัวตั้งเวลาฉุกเฉิน (Safety Timeout) ป้องกันหน้าโหลดค้าง
-    const safetyTimer = setTimeout(() => {
-      setLoading(false);
-    }, 2500);
-
-    // ติดตามสถานะและดึงเซสชันอัตโนมัติจาก Supabase v2
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      try {
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
-        
-        if (currentUser) {
-          await fetchUserRole(currentUser.id); 
-        } else {
-          setRole(null);
-        }
-      } catch (err) {
-        // จัดการข้อผิดพลาดเงียบๆ เพื่อไม่ให้บิลด์พัง
-      } finally {
-        setLoading(false);
-        clearTimeout(safetyTimer);
-      }
-    });
-
-    return () => {
-      if (subscription) subscription.unsubscribe();
-      clearTimeout(safetyTimer);
-    };
-  }, []);
-
-  // ฟังก์ชันสมัครสมาชิก
-  const signUp = (email, password) => supabase.auth.signUp({ email, password });
-
-  // ฟังก์ชันล็อกอินด้วยอีเมล
-  const logIn = (email, password) => supabase.auth.signInWithPassword({ email, password });
-
-  // ฟังก์ชันล็อกอินด้วย Google
-  const loginWithGoogle = async () => {
-    try {
-      await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin, 
-        },
-      });
-    } catch (err) {
-      // โหมด Production จะไม่ใช้ console.error เพื่อความปลอดภัยในการบิลด์
+    const root = window.document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+      root.classList.remove('light');
+    } else {
+      root.classList.add('light');
+      root.classList.remove('dark');
     }
-  };
+    // บันทึกค่าลงใน localStorage เพื่อเปิดเว็บครั้งถัดไปจะได้เป็นธีมเดิม
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
-  // ฟังก์ชันล็อกเอาต์
-  const logout = async () => {
-    try {
-      await supabase.auth.signOut();
-      setUser(null); 
-      setRole(null); 
-    } catch (error) {
-      // จัดการข้อผิดพลาดเบื้องหลัง
-    }
-  };
-
-  const value = {
-    user,
-    role, 
-    signUp,
-    logIn,
-    logout,
-    signOut: logout, 
-    loginWithGoogle,
-    loading
+  // 3. ฟังก์ชันสำหรับสลับธีม
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
   return (
-    <AuthContext.Provider value={value}>
-      {loading ? (
-        <div className="flex min-h-screen items-center justify-center bg-white dark:bg-gray-900 text-gray-500">
-          <div className="text-center space-y-2">
-            <p className="animate-pulse font-medium text-sm">กำลังตรวจสอบสิทธิ์เข้าใช้งานระบบ โปรดรอสักครู่...</p>
-          </div>
-        </div>
-      ) : (
-        children
-      )}
-    </AuthContext.Provider>
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
   );
 }
 
-export function useAuth() {
-  return useContext(AuthContext);
+// ✨ ส่งออก useTheme แบบ Named Export เพื่อให้ Navbar ดึงไปใช้ผ่าน { useTheme } ได้ถูกต้อง
+export function useTheme() {
+  return useContext(ThemeContext);
 }
