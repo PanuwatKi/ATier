@@ -205,25 +205,35 @@ export default function Posts() {
   };
 
   const handleLike = async (post) => {
-    const alreadyLiked = likedPosts[post.id];
-    const updatedLikes = alreadyLiked ? Math.max(0, post.likes - 1) : post.likes + 1;
-    setLikedPosts(prev => ({ ...prev, [post.id]: !alreadyLiked }));
-    await supabase.from('posts').update({ likes: updatedLikes }).eq('id', post.id);
-  };
+  const alreadyLiked = likedPosts[post.id];
+  const updatedLikes = alreadyLiked ? Math.max(0, post.likes - 1) : post.likes + 1;
+  setLikedPosts(prev => ({ ...prev, [post.id]: !alreadyLiked }));
+  
+  // 🔄 เปลี่ยนจาก .update() มาใช้ RPC เพื่อความปลอดภัย
+  await supabase.rpc('increment_like_secure', { 
+    post_id_param: post.id, 
+    updated_likes: updatedLikes 
+  });
+};
 
   const handleAddComment = async (postId, existingComments, text) => {
-    if (!text.trim()) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    const commentatorName = user?.user_metadata?.full_name || user?.email || "Anonymous Student";
-    const newCommentObj = {
-      id: `comment-${Date.now()}`,
-      author: commentatorName,
-      text: text,
-      date: "Just now"
-    };
-    const updatedComments = [...(existingComments || []), newCommentObj];
-    await supabase.from('posts').update({ comments: updatedComments }).eq('id', postId);
+  if (!text.trim()) return;
+  const { data: { user } } = await supabase.auth.getUser();
+  const commentatorName = user?.user_metadata?.full_name || user?.email || "Anonymous Student";
+  const newCommentObj = {
+    id: `comment-${Date.now()}`,
+    author: commentatorName,
+    text: text,
+    date: "Just now"
   };
+  const updatedComments = [...(existingComments || []), newCommentObj];
+  
+  // 🔄 เปลี่ยนจาก .update() มาใช้ RPC เพื่อความปลอดภัยเช่นกัน
+  await supabase.rpc('add_comment_secure', { 
+    post_id_param: postId, 
+    updated_comments: updatedComments 
+  });
+};
 
   const togglePostSetting = async (postId, column, currentValue) => {
     await supabase.from('posts').update({ [column]: !currentValue }).eq('id', postId);
