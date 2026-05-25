@@ -122,7 +122,7 @@ export function AuthProvider({ children }) {
         <div className="flex min-h-screen items-center justify-center bg-white dark:bg-gray-900 text-gray-500">
           <div className="text-center space-y-2">
             {/* ใส่ไอคอนหมุน/เอฟเฟกต์ pulse ให้นุ่มนวลขึ้น */}
-            <p className="animate-pulse font-medium text-sm">กำลังตรวจสอบสิทธิ์เข้าใช้งานระบบ โปรดรอสักครู่...</p>
+            <p className="animate-pulse font-medium text-sm">กำลังตรวจสอบสิทธิ์เข้าใช้งานระบบ โปรดรอสักครู่... ถ้าหากนานเกินไปให้เข้าไปที่ atier-rouge.vercel.app นะครับ</p>
           </div>
         </div>
       ) : (
