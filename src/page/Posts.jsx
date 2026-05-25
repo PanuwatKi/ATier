@@ -160,7 +160,7 @@ export default function Posts() {
 
       setNewTitle(''); setNewSummary(''); setNewContent('');
       setNewTags(''); setImageFile(null); setAttachmentFile(null);
-      alert("🎉 เผยแพร่บทความใหม่สำเร็จและอัปเดตไปยังทุกเครื่องแล้ว!");
+      alert("🎉 The post is successfully published.!");
     } catch (err) {
       alert(`❌ อัปโหลดล้มเหลว: ${err.message}`);
     } finally {
@@ -319,7 +319,7 @@ export default function Posts() {
               <div className="flex flex-wrap gap-6 pt-1 text-xs font-semibold text-zinc-400">
                 <button type="button" onClick={() => setIsDownloadEnabled(!isDownloadEnabled)} className="flex items-center gap-1.5 hover:text-white transition-colors">
                   {isDownloadEnabled ? <ToggleRight className="w-5 h-5 text-emerald-500" /> : <ToggleLeft className="w-5 h-5 text-zinc-600" />}
-                  <span>อนุญาตให้ผู้ใช้อื่นดาวน์โหลดไฟล์แนบนี้</span>
+                  <span>Allow user to download this file.</span>
                 </button>
                 <button type="button" onClick={() => setIsDiscussEnabled(!isDiscussEnabled)} className="flex items-center gap-1.5 hover:text-white transition-colors">
                   {isDiscussEnabled ? <ToggleRight className="w-5 h-5 text-emerald-500" /> : <ToggleLeft className="w-5 h-5 text-zinc-600" />}
@@ -436,17 +436,17 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
             <div className="flex items-center gap-2 border border-amber-500/20 bg-amber-500/5 px-2.5 py-1 rounded-xl text-[10px] text-amber-500 font-bold">
               {/* 👁️ ปุ่มฟังก์ชันซ่อนโพสต์สำหรับแอดมิน */}
               <button onClick={() => togglePostSetting(post.id, 'is_hidden', post.is_hidden)} className="text-amber-600 dark:text-amber-400 hover:underline">
-                {post.is_hidden ? "👁️ แสดงโพสต์" : "🚫 ซ่อนโพสต์"}
+                {post.is_hidden ? "👁️ Show post" : "🚫 Hide post"}
               </button>
               <span className="text-zinc-700">|</span>
               
               <button onClick={() => togglePostSetting(post.id, 'is_download_enabled', post.is_download_enabled)} className="hover:underline">
-                {post.is_download_enabled ? "🔓 ดาวน์โหลดเปิด" : "🔒 ดาวน์โหลดปิด"}
+                {post.is_download_enabled ? "🔓 Enable Download" : "🔒 Disable Download"}
               </button>
               <span className="text-zinc-700">|</span>
               
               <button onClick={() => togglePostSetting(post.id, 'is_discuss_enabled', post.is_discuss_enabled)} className="hover:underline">
-                {post.is_discuss_enabled ? "🔓 คอมเมนต์เปิด" : "🔒 คอมเมนต์ปิด"}
+                {post.is_discuss_enabled ? "🔓 Enable comments" : "🔒 Disable comments"}
               </button>
               <span className="text-zinc-700">|</span>
               
@@ -455,7 +455,7 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
               </button>
             </div>
           )}
-          <span className="flex items-center gap-1.5 bg-slate-50 dark:bg-zinc-950 px-2.5 py-1 rounded-md text-[11px] font-semibold"><Clock className="w-3.5 h-3.5" /> 5 min read</span>
+          <span className="flex items-center gap-1.5 bg-slate-50 dark:bg-zinc-950 px-2.5 py-1 rounded-md text-[11px] font-semibold"><Clock className="w-3.5 h-3.5" /> out of service</span>
         </div>
       </div>
 
@@ -542,11 +542,11 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
 
       {showDiscussSection && (
         <div className="pt-4 border-t border-slate-100 dark:border-zinc-800/60 space-y-4 bg-slate-50/50 dark:bg-zinc-950/30 p-4 rounded-2xl">
-          <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">ห้องสนทนาแลกเปลี่ยนความคิดเห็น</h4>
+          <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Comment(s)</h4>
           
           <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
             {(!post.comments || post.comments.length === 0) ? (
-              <p className="text-xs text-zinc-500 italic font-mono pl-1">ยังไม่มีข้อความสนทนา...</p>
+              <p className="text-xs text-zinc-500 italic font-mono pl-1">No messages yet...</p>
             ) : (
               post.comments.map((comment, i) => (
                 <div key={comment.id || i} className="bg-white dark:bg-zinc-900 border border-slate-200/50 dark:border-zinc-800/80 p-3 rounded-xl">
@@ -585,7 +585,7 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
             </div>
           ) : (
             <div className="text-center p-2.5 bg-zinc-800/50 border border-zinc-800 text-zinc-500 rounded-xl text-xs font-semibold select-none">
-              🔒 กล่องข้อความสลับปิดการใช้งานชั่วคราวโดยอาจารย์หรือผู้ดูแลระบบ
+              🔒 Comments have been closed by the administrator.
             </div>
           )}
         </div>
