@@ -19,16 +19,16 @@ import {
   Wrench
 } from 'lucide-react';
 import { supabase } from '../supabaseClient'; 
+import { useAuth } from '../context/AuthContext'; // 🔑 ดึงระบบตรวจสิทธิ์ส่วนกลางมาใช้งาน
 
 export default function Posts() {
+  // --- SUPABASE ROLE & AUTHORIZATION CENTRAL SYSTEM ---
+  const { user, role } = useAuth(); 
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // 🔐 ระบบจัดการสิทธิ์และมุมมอง (แยก Real Auth กับ UI View ออกจากกัน)
-  const [isRealAdmin, setIsRealAdmin] = useState(false); 
+  // สวิตช์สลับมุมมองหน้าจอระหว่าง Admin / General User
   const [isAdminModeActive, setIsAdminModeActive] = useState(false); 
-  const [currentUserEmail, setCurrentUserEmail] = useState('');
-
   const [likedPosts, setLikedPosts] = useState({});
 
   // Form States สำหรับ Admin เขียนโพสต์
@@ -48,82 +48,22 @@ export default function Posts() {
     window.location.hostname === '127.0.0.1'
   );
 
-  // 🔐 ระบบตรวจสอบสิทธิ์จากฐานข้อมูลหลังบ้าน
+  // ตรวจสอบสิทธิ์ Admin/Super Admin อิงตามระบบส่วนกลางของคุณ
+  const isAdminUser = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin' || role === 'superadmin';
+
+  // ซิงค์โหมดการแสดงผลแอดมินอัตโนมัติเมื่อตรวจสอบสิทธิ์ผ่าน
   useEffect(() => {
-    const syncAdminStatus = (user) => {
-      if (!user) {
-        setIsRealAdmin(false);
-        setIsAdminModeActive(false);
-        setCurrentUserEmail('');
-        return;
-      }
+    if (isAdminUser || isLocalDev) {
+      setIsAdminModeActive(true);
+    } else {
+      setIsAdminModeActive(false);
+    }
+  }, [role, isAdminUser, isLocalDev]);
 
-      setCurrentUserEmail(user.email || '');
+  // 🛡️ ตัวแปรตัดสินสุดท้ายในการแสดงผล UI ฟอร์มและปุ่มจัดการต่าง ๆ
+  const isAdmin = (isAdminUser || isLocalDev) && isAdminModeActive;
 
-      const validateRole = (roleValue) => {
-        if (!roleValue) return false;
-        if (typeof roleValue === 'string') {
-          const lower = roleValue.toLowerCase();
-          return lower === 'admin' || lower === 'superadmin' || lower === 'super admin';
-        }
-        if (Array.isArray(roleValue)) {
-          return roleValue.some(role => 
-            typeof role === 'string' && 
-            ['admin', 'superadmin', 'super admin'].includes(role.toLowerCase())
-          );
-        }
-        return false;
-      };
-
-      const userMeta = user.user_metadata || {};
-      const appMeta = user.app_metadata || {};
-      const userEmail = user.email?.toLowerCase() || '';
-
-      // ตรวจสอบเงื่อนไขการเป็น Admin (อิงตาม SQL Function)
-      const hasAuthorizedRole = 
-        validateRole(userMeta.role) || 
-        validateRole(userMeta.roles) || 
-        validateRole(appMeta.role) || 
-        validateRole(appMeta.roles) || 
-        userMeta.is_admin === true ||
-        userMeta.is_superadmin === true ||
-        appMeta.is_admin === true ||
-        appMeta.is_superadmin === true ||
-        userEmail === 'admin@atier.com' ||
-        userEmail.includes('admin');
-
-      setIsRealAdmin(hasAuthorizedRole);
-      
-      // ถ้าสิทธิ์ผ่าน หรือรันบนเครื่อง Local ให้เปิดใช้งานโหมดแอดมินอัตโนมัติ
-      if (hasAuthorizedRole || isLocalDev) {
-        setIsAdminModeActive(true);
-      }
-      
-      console.log("=== Auth Identity Log ===", {
-        email: user.email,
-        user_metadata: userMeta,
-        app_metadata: appMeta,
-        calculatedIsAdmin: hasAuthorizedRole
-      });
-    };
-
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      syncAdminStatus(user);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      syncAdminStatus(session?.user || null);
-    });
-
-    return () => {
-      if (subscription) subscription.unsubscribe();
-    };
-  }, [isLocalDev]);
-
-  // 🛡️ ตัวแปรตัดสินสุดท้ายในการแสดงผล UI บนหน้าเว็บ
-  const isAdmin = (isRealAdmin || isLocalDev) && isAdminModeActive;
-
-  // 🔄 ดึงข้อมูลและเชื่อมต่อระบบ Real-time Sync
+  // 🔄 ดึงข้อมูลบทความวิจัยและเชื่อมต่อระบบ Real-time Sync
   const fetchPosts = async () => {
     try {
       const { data, error } = await supabase
@@ -223,7 +163,7 @@ export default function Posts() {
       setNewTags(''); setImageFile(null); setAttachmentFile(null);
       alert("🎉 เผยแพร่บทความใหม่สำเร็จและอัปเดตไปยังทุกเครื่องแล้ว!");
     } catch (err) {
-      alert(`❌ อัปโหลดล้มเหลว: ${err.message}\n\n💡 คำแนะนำ: ตรวจสอบ RLS Policy ของตาราง 'posts' บน Supabase`);
+      alert(`❌ อัปโหลดล้มเหลว: ${err.message}\n\n💡 คำแนะนำ: ตรวจสอบ SQL RLS Policy ของตาราง 'posts'`);
     } finally {
       setUploading(false);
     }
@@ -242,7 +182,6 @@ export default function Posts() {
 
   const handleAddComment = async (postId, existingComments, text) => {
     if (!text.trim()) return;
-    const { data: { user } } = await supabase.auth.getUser();
     const commentatorName = user?.user_metadata?.full_name || user?.email || "Anonymous Student";
     const newCommentObj = {
       id: `comment-${Date.now()}`,
@@ -318,17 +257,17 @@ export default function Posts() {
         </div>
         {isAdmin && (
           <div className="bg-amber-500/10 border border-amber-500/30 text-amber-500 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 animate-pulse">
-            <Shield className="w-3.5 h-3.5" /> แอดมินคอนโทรลรูม (Active)
+            <Shield className="w-3.5 h-3.5" /> แอดมินคอนโทรลรูม ({role || "Super Admin"})
           </div>
         )}
       </div>
 
-      {/* ⚠️ PRODUCTION SECURITY MONITOR (แสดงเฉพาะเมื่อสิทธิ์ไม่ผ่านบน Production เพื่อแจ้งเตือนแนวทางแก้ไข) */}
-      {!isRealAdmin && !isLocalDev && (
+      {/* ⚠️ PRODUCTION SECURITY MONITOR (จะแจ้งเตือนเมื่อระบบมองไม่เห็นสิทธิ์จริงของคุณบนโฮสต์) */}
+      {!isAdminUser && !isLocalDev && (
         <div className="max-w-3xl mx-auto px-4 mb-8">
           <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-xs font-medium text-red-400 space-y-1">
-            <p className="font-bold text-red-500 flex items-center gap-1">🔒 สิทธิ์ล็อกอินปัจจุบันไม่ใช่แอดมิน ({currentUserEmail || 'ยังไม่ได้ล็อกอิน'})</p>
-            <p className="text-zinc-400">เนื่องจากไม่ได้รันบน localhost ระบบความปลอดภัยจึงบล็อกแผงควบคุมอัตโนมัติ ให้เข้าไปเพิ่มคีย์ `role: "admin"` ในหน้าแผงควบคุมผู้ใช้ของ Supabase เพื่อเปิดสิทธิ์ไอดีนี้</p>
+            <p className="font-bold text-red-500 flex items-center gap-1">🔒 สิทธิ์ล็อกอินปัจจุบันไม่ใช่แอดมิน ({user?.email || 'ยังไม่ได้ล็อกอิน'})</p>
+            <p className="text-zinc-400">AuthContext ตรวจพบว่า Role ปัจจุบันของคุณคือ "{role || 'ไม่มีสิทธิ์'}" ซึ่งไม่ใช่ระดับผู้ดูแลระบบ</p>
           </div>
         </div>
       )}
@@ -436,8 +375,8 @@ export default function Posts() {
         )}
       </div>
 
-      {/* 🛠️ DEV MODE FLOATING PANEL */}
-      {(isLocalDev || isRealAdmin) && (
+      {/* 🛠️ DEV MODE FLOATING PANEL (แสดงให้สลับโหมดได้เมื่อล็อกอินผ่านสิทธิ์แอดมินสำเร็จ) */}
+      {(isLocalDev || isAdminUser) && (
         <div className="fixed bottom-4 right-4 z-50 bg-zinc-900 border border-zinc-800 p-3 rounded-2xl shadow-xl flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
             <Wrench className="w-3.5 h-3.5" />
