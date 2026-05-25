@@ -245,15 +245,15 @@ export default function Posts() {
       <div className="max-w-3xl mx-auto px-4 mb-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <span className="text-xs font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5" /> Intelligence Exchange
+            <Sparkles className="w-3.5 h-3.5" /> Posts
           </span>
           <h1 className="text-3xl font-extrabold tracking-tight mt-1 bg-gradient-to-r from-slate-900 to-indigo-950 dark:from-white dark:to-zinc-400 bg-clip-text text-transparent">
-            ATier Chronicle
+            ATier Posts 
           </h1>
         </div>
         {isAdmin && (
           <div className="bg-amber-500/10 border border-amber-500/30 text-amber-500 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 animate-pulse">
-            <Shield className="w-3.5 h-3.5" /> แอดมินคอนโทรลรูม (Active)
+            <Shield className="w-3.5 h-3.5" /> Admin Control Room (Active)
           </div>
         )}
       </div>
@@ -264,31 +264,31 @@ export default function Posts() {
           <div className="bg-white dark:bg-zinc-900 border-2 border-dashed border-amber-500/30 rounded-3xl p-6 shadow-md space-y-4">
             <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-zinc-800/80">
               <Shield className="w-4 h-4 text-amber-500" />
-              <h3 className="text-sm font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">สร้าง Asset บทความวิจัยและองค์ความรู้ใหม่</h3>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">สร้างโพสต์/Create Post</h3>
             </div>
 
             <form onSubmit={handleCreatePost} className="space-y-4">
               <input 
                 type="text" required value={newTitle} onChange={(e) => setNewTitle(e.target.value)}
-                placeholder="Core Headline / ชื่อหัวข้อวิจัยหลัก..."
+                placeholder="Headline / ชื่อหัวข้อ..."
                 className="w-full px-4 py-2.5 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-base font-semibold focus:outline-none focus:border-blue-500 transition-colors"
               />
 
               <input 
                 type="text" required value={newSummary} onChange={(e) => setNewSummary(e.target.value)}
-                placeholder="คำอธิบายสรุปสั้น ๆ ของเนื้อหา (แสดงในหน้ารวมโพสต์)..."
+                placeholder="ชื่อผู้โพสต์/Author หรือ คำอธิบายโพสต์/Post Description (แสดงในหน้ารวมโพสต์/Show on the post feed)..."
                 className="w-full px-4 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs text-slate-600 dark:text-zinc-400 focus:outline-none focus:border-blue-500"
               />
 
               <textarea 
                 required rows="5" value={newContent} onChange={(e) => setNewContent(e.target.value)}
-                placeholder="เขียนหรือร่างเนื้อหาบทความเชิงลึกที่นี่..."
+                placeholder="เนื้อหา / Post content..."
                 className="w-full px-4 py-3 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none leading-relaxed resize-none"
               />
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-zinc-400 block">🖼️ ไฟล์รูปภาพหน้าปก</label>
+                  <label className="text-[11px] font-bold text-zinc-400 block">🖼️ ไฟล์รูปภาพหน้าปก/Cover image file</label>
                   <div className="relative flex items-center bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl p-2">
                     <ImageIcon className="w-4 h-4 text-slate-400 ml-2 mr-2" />
                     <input 
@@ -299,7 +299,7 @@ export default function Posts() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[11px] font-bold text-zinc-400 block">📎 ไฟล์ประกอบสำหรับผู้เรียนดาวน์โหลด</label>
+                  <label className="text-[11px] font-bold text-zinc-400 block">📎 ไฟล์ให้ผู้ใช้ดาวน์โหลด/File for user download</label>
                   <div className="relative flex items-center bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl p-2">
                     <Paperclip className="w-4 h-4 text-slate-400 ml-2 mr-2" />
                     <input 
@@ -312,7 +312,7 @@ export default function Posts() {
 
               <input 
                 type="text" value={newTags} onChange={(e) => setNewTags(e.target.value)}
-                placeholder="แท็กหัวข้อ (คั่นด้วยเครื่องหมายจุลภาค เช่น: Competitive, C++, Nanoscience)"
+                placeholder="แท็กหัวข้อ (คั่นด้วยเครื่องหมายจุลภาค เช่น: Bio,C++,Dev)"
                 className="w-full px-4 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none"
               />
 
@@ -323,7 +323,7 @@ export default function Posts() {
                 </button>
                 <button type="button" onClick={() => setIsDiscussEnabled(!isDiscussEnabled)} className="flex items-center gap-1.5 hover:text-white transition-colors">
                   {isDiscussEnabled ? <ToggleRight className="w-5 h-5 text-emerald-500" /> : <ToggleLeft className="w-5 h-5 text-zinc-600" />}
-                  <span>เปิดระบบแสดงความคิดเห็น (Discuss)</span>
+                  <span>เปิดคอมเม้น (Allow user to Comment)</span>
                 </button>
               </div>
 
@@ -344,7 +344,7 @@ export default function Posts() {
       {/* 📇 รายการแสดงผลบล็อกบทความ */}
       <div className="max-w-3xl mx-auto px-4 space-y-10">
         {posts.length === 0 ? (
-          <div className="text-center text-zinc-500 font-mono text-sm py-12">ยังไม่มีบทความที่เผยแพร่ในระบบ</div>
+          <div className="text-center text-zinc-500 font-mono text-sm py-12">There are currently no published articles.</div>
         ) : (
           posts
             .filter(post => !post.is_hidden || isAdmin) // 🛠️ กรองโพสต์: ถ้าถูกซ่อน คนทั่วไปจะไม่เห็น แต่ Admin จะยังมองเห็นอยู่
@@ -369,8 +369,8 @@ export default function Posts() {
           <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
             <Wrench className="w-3.5 h-3.5" />
             <div className="flex flex-col">
-              <span className="text-[9px] text-zinc-400">โหมดมุมมอง</span>
-              <span>{isAdminModeActive ? "👁️ แอดมิน" : "👤 ทั่วไป"}</span>
+              <span className="text-[9px] text-zinc-400">View mode</span>
+              <span>{isAdminModeActive ? "👁️ Admin" : "👤 User"}</span>
             </div>
           </div>
           <button 
