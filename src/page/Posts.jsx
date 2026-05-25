@@ -18,17 +18,18 @@ import {
   Trash2,
   Wrench
 } from 'lucide-react';
+// 🔌 นำเข้า supabase client
 import { supabase } from '../supabaseClient'; 
-import { useAuth } from '../context/AuthContext'; 
 
 export default function Posts() {
-  // --- SUPABASE ROLE & AUTHORIZATION CENTRAL SYSTEM ---
-  const { user, role } = useAuth(); 
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // สวิตช์สลับมุมมองหน้าจอระหว่าง Admin / General User
-  const [isAdminModeActive, setIsAdminModeActive] = useState(false); 
+  // 🔐 ระบบจัดการสิทธิ์และมุมมอง (แยก Real Auth กับ UI View ออกจากกัน)
+  const [user, setUser] = useState(null); // ⭐ เพิ่ม State เพื่อเก็บข้อมูลผู้ใช้สิทธิ์ปัจจุบันสำหรับส่งไปพร้อมโพสต์
+  const [isRealAdmin, setIsRealAdmin] = useState(false); // ตรวจสอบว่าไอดีนี้มีสิทธิ์ Admin ในระบบจริงไหม
+  const [isAdminModeActive, setIsAdminModeActive] = useState(false); // สวิตช์สลับมุมมองหน้าจอระหว่าง Admin / General User
+
   const [likedPosts, setLikedPosts] = useState({});
 
   // Form States สำหรับ Admin เขียนโพสต์
@@ -42,28 +43,81 @@ export default function Posts() {
   const [newTags, setNewTags] = useState('');
   const [uploading, setUploading] = useState(false);
 
-  // 🌐 ตรวจสอบสภาพแวดล้อม localhost
+  // 🌐 ตรวจสอบสภาพแวดล้อมเพื่อความสะดวกในการพัฒนา (Localhost)
   const isLocalDev = typeof window !== 'undefined' && (
     window.location.hostname === 'localhost' || 
     window.location.hostname === '127.0.0.1'
   );
 
-  // ตรวจสอบสิทธิ์ Admin/Super Admin อิงตามระบบส่วนกลางของคุณ
-  const isAdminUser = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin' || role === 'superadmin';
-
-  // ซิงค์โหมดการแสดงผลแอดมินอัตโนมัติเมื่อตรวจสอบสิทธิ์ผ่าน
+  // 🔐 ระบบตรวจสอบสิทธิ์จากฐานข้อมูลหลังบ้าน
   useEffect(() => {
-    if (isAdminUser || isLocalDev) {
-      setIsAdminModeActive(true);
-    } else {
-      setIsAdminModeActive(false);
-    }
-  }, [role, isAdminUser, isLocalDev]);
+    const syncAdminStatus = (currentUser) => {
+      if (!currentUser) {
+        setUser(null);
+        setIsRealAdmin(false);
+        setIsAdminModeActive(false);
+        return;
+      }
 
-  // 🛡️ ตัวแปรตัดสินสุดท้ายในการแสดงผล UI ฟอร์มและปุ่มจัดการต่าง ๆ
-  const isAdmin = (isAdminUser || isLocalDev) && isAdminModeActive;
+      // บันทึกข้อมูลผู้ใช้ปัจจุบันลง State
+      setUser(currentUser);
 
-  // 🔄 ดึงข้อมูลบทความวิจัยและเชื่อมต่อระบบ Real-time Sync
+      const validateRole = (roleValue) => {
+        if (!roleValue) return false;
+        if (typeof roleValue === 'string') {
+          const lower = roleValue.toLowerCase();
+          return lower === 'admin' || lower === 'superadmin' || lower === 'super admin';
+        }
+        if (Array.isArray(roleValue)) {
+          return roleValue.some(role => 
+            typeof role === 'string' && 
+            ['admin', 'superadmin', 'super admin'].includes(role.toLowerCase())
+          );
+        }
+        return false;
+      };
+
+      const userMeta = currentUser.user_metadata || {};
+      const appMeta = currentUser.app_metadata || {};
+      const userEmail = currentUser.email?.toLowerCase() || '';
+
+      const hasAuthorizedRole = 
+        validateRole(userMeta.role) || 
+        validateRole(userMeta.roles) || 
+        validateRole(appMeta.role) || 
+        validateRole(appMeta.roles) || 
+        userMeta.is_admin === true ||
+        userMeta.is_superadmin === true ||
+        appMeta.is_admin === true ||
+        appMeta.is_superadmin === true ||
+        userEmail === 'admin@atier.com';
+
+      // บันทึกสิทธิ์จริงของบัญชีนี้ไว้ในระบบ
+      setIsRealAdmin(hasAuthorizedRole);
+      
+      // ตั้งค่าเริ่มต้น: ถ้าเป็นแอดมินจริงหรืออยู่ในเครื่อง Local ให้เปิดโหมดแอดมินไว้ก่อน
+      if (hasAuthorizedRole || isLocalDev) {
+        setIsAdminModeActive(true);
+      }
+    };
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      syncAdminStatus(user);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      syncAdminStatus(session?.user || null);
+    });
+
+    return () => {
+      if (subscription) subscription.unsubscribe();
+    };
+  }, [isLocalDev]);
+
+  // 🛡️ ตัวแปรตัดสินสุดท้ายในการแสดงผล UI บนหน้าเว็บ (เปิดสิทธิ์ต่อเมื่อเข้าเงื่อนไขสวิตช์เปิดอยู่)
+  const isAdmin = (isRealAdmin || isLocalDev) && isAdminModeActive;
+
+  // 🔄 ดึงข้อมูลและเชื่อมต่อระบบ Real-time Sync
   const fetchPosts = async () => {
     try {
       const { data, error } = await supabase
@@ -114,10 +168,6 @@ export default function Posts() {
   // 📝 ฟังก์ชันสร้างโพสต์ใหม่ลงฐานข้อมูล
   const handleCreatePost = async (e) => {
     e.preventDefault();
-    if (!isAdmin) {
-      alert("❌ ปฏิเสธการทำงาน: คุณไม่มีสิทธิ์เข้าถึงฟังก์ชันนี้");
-      return;
-    }
     if (!newTitle || !newSummary || !newContent) return;
 
     setUploading(true);
@@ -140,7 +190,7 @@ export default function Posts() {
 
       const tagsArray = newTags ? newTags.split(',').map(t => t.trim()) : ["ATier", "Research"];
 
-      // 🚀 ส่งข้อมูลพร้อมแนบ user_id เพื่อแก้ปัญหาการติดสิทธิ์ RLS บน Production
+      // 🚀 ทำการส่งคำขอเขียนข้อมูลลงตารางพร้อมแนบ user_id ของผู้ใช้ปัจจุบัน
       const { error } = await supabase
         .from('posts')
         .insert([{
@@ -153,11 +203,11 @@ export default function Posts() {
           tags: tagsArray,
           is_download_enabled: isDownloadEnabled,
           is_discuss_enabled: isDiscussEnabled,
-          is_hidden: false, 
+          is_hidden: false, // ค่าเริ่มต้นตอนสร้างคือไม่ซ่อนโพสต์
           likes: 0,
           views: 0,
           comments: [],
-          user_id: user?.id 
+          user_id: user?.id // ⭐ แนบ ID ผู้สร้างเพื่อผ่านเกณฑ์ความปลอดภัยของ RLS
         }]);
 
       if (error) throw error;
@@ -166,7 +216,7 @@ export default function Posts() {
       setNewTags(''); setImageFile(null); setAttachmentFile(null);
       alert("🎉 เผยแพร่บทความใหม่สำเร็จและอัปเดตไปยังทุกเครื่องแล้ว!");
     } catch (err) {
-      alert(`❌ อัปโหลดล้มเหลว: ${err.message}\n\n💡 คำแนะนำ: ตรวจสอบสิทธิ์ RLS หรือความถูกต้องของ Schema ตาราง 'posts'`);
+      alert(`❌ อัปโหลดล้มเหลว: ${err.message}\n\n💡 รายละเอียดระบบ: ${err.details || 'ตรวจสอบว่าโครงสร้างตารางมีคอลัมน์ user_id และคอลัมน์ใหม่อย่างครบถ้วนแล้วหรือยัง'}`);
     } finally {
       setUploading(false);
     }
@@ -201,36 +251,22 @@ export default function Posts() {
   };
 
   const togglePostSetting = async (postId, column, currentValue) => {
-    if (!isAdmin) {
-      alert("❌ คุณไม่มีสิทธิ์แก้ไขการตั้งค่าโพสต์นี้");
-      return;
-    }
     try {
       const { error } = await supabase
         .from('posts')
         .update({ [column]: !currentValue })
         .eq('id', postId);
-      
       if (error) throw error;
     } catch (err) {
-      alert(`❌ ไม่สามารถอัปเดตสิทธิ์ได้: ${err.message}`);
+      alert(`❌ ไม่สามารถตั้งค่าโพสต์ได้: ${err.message}`);
     }
   };
 
   const handleDeletePost = async (postId) => {
-    if (!isAdmin) {
-      alert("❌ คุณไม่มีสิทธิ์ลบโพสต์นี้");
-      return;
-    }
     if (window.confirm("คุณแน่ใจหรือไม่ว่าต้องการลบโพสต์นี้ถาวร?")) {
       try {
-        const { error } = await supabase
-          .from('posts')
-          .delete()
-          .eq('id', postId);
-        
+        const { error } = await supabase.from('posts').delete().eq('id', postId);
         if (error) throw error;
-        alert("🗑️ ลบโพสต์ออกจากระบบ Chronicle สำเร็จ");
       } catch (err) {
         alert(`❌ ลบโพสต์ล้มเหลว: ${err.message}`);
       }
@@ -245,14 +281,14 @@ export default function Posts() {
     );
   }
 
-  // 👁️ กรองโพสต์: แอดมินเห็นทั้งหมด ส่วนยูสเซอร์ทั่วไปจะไม่เห็นโพสต์ที่ถูกติ๊กซ่อน (is_hidden === true)
+  // 👁️ กรองเงื่อนไขการแสดงผล: ถ้าเป็นแอดมินจะเห็นทั้งหมด แต่ถ้าผู้ใช้ทั่วไปจะไม่แสดงโพสต์ที่ถูกตั้งค่าซ่อนเอาไว้ (is_hidden === true)
   const displayedPosts = isAdmin ? posts : posts.filter(p => !p.is_hidden);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-50 py-12 transition-colors duration-200 pb-24">
       
       {/* ส่วนหัวหน้าเว็บ */}
-      <div className="max-w-3xl mx-auto px-4 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="max-w-3xl mx-auto px-4 mb-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <span className="text-xs font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5" /> Intelligence Exchange
@@ -263,7 +299,7 @@ export default function Posts() {
         </div>
         {isAdmin && (
           <div className="bg-amber-500/10 border border-amber-500/30 text-amber-500 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 animate-pulse">
-            <Shield className="w-3.5 h-3.5" /> แอดมินคอนโทรลรูม ({role || "Super Admin"})
+            <Shield className="w-3.5 h-3.5" /> แอดมินคอนโทรลรูม (Active)
           </div>
         )}
       </div>
@@ -371,8 +407,8 @@ export default function Posts() {
         )}
       </div>
 
-      {/* 🛠️ DEV MODE FLOATING PANEL */}
-      {(isLocalDev || isAdminUser) && (
+      {/* 🛠️ DEV MODE FLOATING PANEL: ปุ่มสลับโหมดจำลองสิทธิ์ที่ควบคุม UI ได้จริง */}
+      {(isLocalDev || isRealAdmin) && (
         <div className="fixed bottom-4 right-4 z-50 bg-zinc-900 border border-zinc-800 p-3 rounded-2xl shadow-xl flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
             <Wrench className="w-3.5 h-3.5" />
@@ -418,7 +454,7 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
   return (
     <article className={`bg-white dark:bg-zinc-900 border rounded-3xl p-6 md:p-8 shadow-sm hover:shadow-md transition-all duration-300 space-y-5 relative ${
       post.is_hidden 
-        ? 'opacity-70 border-red-500/30 bg-red-500/[0.01] dark:bg-red-500/[0.01]' 
+        ? 'opacity-60 border-red-500/40 bg-red-500/[0.01]' 
         : 'border-slate-200/60 dark:border-zinc-800/60'
     }`}>
       
@@ -431,19 +467,19 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
         <div className="flex items-center gap-2">
           {isAdmin && (
             <div className="flex items-center gap-2 border border-amber-500/20 bg-amber-500/5 px-2.5 py-1 rounded-xl text-[10px] text-amber-500 font-bold">
-              {/* ปุ่มควบคุมฟังก์ชันซ่อน/แสดงโพสต์ */}
+              {/* ⭐ เพิ่มปุ่มซ่อน / แสดงโพสต์สำหรับแอดมิน */}
               <button onClick={() => togglePostSetting(post.id, 'is_hidden', post.is_hidden)} className="hover:underline text-amber-600 dark:text-amber-400">
                 {post.is_hidden ? "👁️ แสดงโพสต์" : "🚫 ซ่อนโพสต์"}
               </button>
-              <span className="text-zinc-300 dark:text-zinc-700">|</span>
+              <span className="text-zinc-700">|</span>
               <button onClick={() => togglePostSetting(post.id, 'is_download_enabled', post.is_download_enabled)} className="hover:underline">
                 {post.is_download_enabled ? "🔓 ดาวน์โหลดเปิด" : "🔒 ดาวน์โหลดปิด"}
               </button>
-              <span className="text-zinc-300 dark:text-zinc-700">|</span>
+              <span className="text-zinc-700">|</span>
               <button onClick={() => togglePostSetting(post.id, 'is_discuss_enabled', post.is_discuss_enabled)} className="hover:underline">
                 {post.is_discuss_enabled ? "🔓 คอมเมนต์เปิด" : "🔒 คอมเมนต์ปิด"}
               </button>
-              <span className="text-zinc-300 dark:text-zinc-700">|</span>
+              <span className="text-zinc-700">|</span>
               <button onClick={() => handleDeletePost(post.id)} className="text-red-400 hover:text-red-500">
                 <Trash2 className="w-3 h-3 inline" />
               </button>
@@ -456,9 +492,10 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-xl md:text-2xl font-extrabold text-slate-950 dark:text-zinc-100 tracking-tight leading-tight">{post.title}</h2>
+          {/* แถบแจ้งเตือนสถานะซ่อน (เห็นเฉพาะแอดมิน) */}
           {post.is_hidden && (
-            <span className="bg-red-500/10 border border-red-500/30 text-red-500 px-2 py-0.5 rounded-lg text-[10px] font-bold shrink-0">
-              🚫 ซ่อนอยู่ (เฉพาะแอดมินที่เห็น)
+            <span className="bg-red-500/10 border border-red-500/30 text-red-500 px-2 py-0.5 rounded-lg text-[10px] font-bold">
+              🚫 โพสต์นี้ถูกซ่อนอยู่ (เฉพาะแอดมินที่เห็น)
             </span>
           )}
         </div>
