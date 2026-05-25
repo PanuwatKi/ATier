@@ -15,7 +15,7 @@ import { useAuth } from '../context/AuthContext';
 
 const MOCK_MEMBERS = [
   { id: 1, name: "Panuwat Kiatteerarat", study: "Computer Engineer Student", university: "--", phone: "063-879-0083", ig: "@pnwiinn", line: "maibok", email: "in.klang2551@gmail.com" },
-  { id: 2, name: "Kornkanok P.", study: "Engineering Student", university: "Chulalongkorn University", phone: "082-345-6789", ig: "@korn_p", line: "korn_line", email: "kornkanok@atier.org" },
+  { id: 2, name: "Kornkanok P.", study: "Engineering Student ?", university: "Chulalongkorn University", phone: "082-345-6789", ig: "@korn_p", line: "korn_line", email: "kornkanok@atier.org" },
   { id: 3, name: "Nattakit M.", study: "Computer Science Student", university: "Kasetsart University", phone: "083-456-7890", ig: "@nat_kit", line: "nat_line", email: "nattakit@atier.org" },
   { id: 4, name: "Pimchanok T.", study: "Biomedical Student", university: "Mahidol University", phone: "084-567-8901", ig: "@pim_t", line: "pim_line", email: "pimchanok@atier.org" },
   { id: 5, name: "Chayanon K.", study: "Data Science Student", university: "KMUTT", phone: "085-678-9012", ig: "@chayanon_k", line: "chaya_line", email: "chayanon@atier.org" },
