@@ -5,17 +5,16 @@ import { useTheme } from '../context/ThemeContext';
 import { Sun, Moon, Menu, X, Shield, User, LogOut } from 'lucide-react';
 
 export default function Navbar() {
-  // เชื่อมต่อกับ AuthContext ที่เราแก้ชื่อฟังก์ชันเป็น logout ให้ตรงกันแล้ว
-  const { user, loading, loginWithGoogle, logout } = useAuth();
+  // 👑 ดึงค่า role มาจาก AuthContext โดยตรง เพื่อให้แสดงสิทธิ์ Super Admin จาก Supabase
+  const { user, role, loading, loginWithGoogle, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
 
   const isActive = (path) => location.pathname === path;
 
-  // สมมติฐานเรื่อง Role: หากคุณยังไม่มีการดึง role มาจาก AuthContext 
-  // ให้ใช้ค่า Default ไปก่อน หรือดึงจาก metadata ถ้ามีครับ
-  const role = user?.user_metadata?.role || "User";
+  // ตรวจสอบสิทธิ์จากฐานข้อมูลก่อน หากไม่มีค่อยดึงจาก metadata หรือ fallback เป็น User
+  const displayRole = role || user?.user_metadata?.role || "User";
 
   const navLinks = [
     { name: 'Home', path: '/' },
@@ -68,7 +67,7 @@ export default function Navbar() {
                     {user.user_metadata?.full_name || user.email.split('@')[0]}
                   </span>
                   <span className="flex items-center text-[10px] font-bold text-emerald-500">
-                    <Shield size={10} className="mr-0.5" /> {role}
+                    <Shield size={10} className="mr-0.5" /> {displayRole}
                   </span>
                 </div>
                 {user.user_metadata?.avatar_url ? (
@@ -77,7 +76,7 @@ export default function Navbar() {
                   <div className="p-1.5 bg-blue-500 rounded-full text-white"><User size={16} /></div>
                 )}
                 <button
-                  onClick={logout} // เรียกฟังก์ชัน logout ที่ถูกต้อง
+                  onClick={logout}
                   className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                 >
                   <LogOut size={16} />
@@ -103,6 +102,26 @@ export default function Navbar() {
           </div>
         </div>
       </div>
+
+      {/* 📱 Mobile Menu Dropdown */}
+      {isOpen && (
+        <div className="md:hidden border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-4 pt-2 pb-4 space-y-1">
+          {navLinks.map((link) => (
+            <Link
+              key={link.path}
+              to={link.path}
+              onClick={() => setIsOpen(false)}
+              className={`block px-3 py-2 rounded-lg text-base font-medium transition-all ${
+                isActive(link.path)
+                  ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400'
+                  : 'hover:bg-gray-100 dark:hover:bg-gray-900 text-gray-600 dark:text-gray-300'
+              }`}
+            >
+              {link.name}
+            </Link>
+          ))}
+        </div>
+      )}
     </nav>
   );
 }
