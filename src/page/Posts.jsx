@@ -19,7 +19,7 @@ import {
   Wrench
 } from 'lucide-react';
 import { supabase } from '../supabaseClient'; 
-import { useAuth } from '../context/AuthContext'; // 🔑 ดึงระบบตรวจสิทธิ์ส่วนกลางมาใช้งาน
+import { useAuth } from '../context/AuthContext'; 
 
 export default function Posts() {
   // --- SUPABASE ROLE & AUTHORIZATION CENTRAL SYSTEM ---
@@ -140,6 +140,7 @@ export default function Posts() {
 
       const tagsArray = newTags ? newTags.split(',').map(t => t.trim()) : ["ATier", "Research"];
 
+      // 🚀 ส่งข้อมูลพร้อมแนบ user_id เพื่อแก้ปัญหาการติดสิทธิ์ RLS บน Production
       const { error } = await supabase
         .from('posts')
         .insert([{
@@ -152,9 +153,11 @@ export default function Posts() {
           tags: tagsArray,
           is_download_enabled: isDownloadEnabled,
           is_discuss_enabled: isDiscussEnabled,
+          is_hidden: false, 
           likes: 0,
           views: 0,
-          comments: []
+          comments: [],
+          user_id: user?.id 
         }]);
 
       if (error) throw error;
@@ -163,7 +166,7 @@ export default function Posts() {
       setNewTags(''); setImageFile(null); setAttachmentFile(null);
       alert("🎉 เผยแพร่บทความใหม่สำเร็จและอัปเดตไปยังทุกเครื่องแล้ว!");
     } catch (err) {
-      alert(`❌ อัปโหลดล้มเหลว: ${err.message}\n\n💡 คำแนะนำ: ตรวจสอบ SQL RLS Policy ของตาราง 'posts'`);
+      alert(`❌ อัปโหลดล้มเหลว: ${err.message}\n\n💡 คำแนะนำ: ตรวจสอบสิทธิ์ RLS หรือความถูกต้องของ Schema ตาราง 'posts'`);
     } finally {
       setUploading(false);
     }
@@ -242,6 +245,9 @@ export default function Posts() {
     );
   }
 
+  // 👁️ กรองโพสต์: แอดมินเห็นทั้งหมด ส่วนยูสเซอร์ทั่วไปจะไม่เห็นโพสต์ที่ถูกติ๊กซ่อน (is_hidden === true)
+  const displayedPosts = isAdmin ? posts : posts.filter(p => !p.is_hidden);
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-50 py-12 transition-colors duration-200 pb-24">
       
@@ -261,16 +267,6 @@ export default function Posts() {
           </div>
         )}
       </div>
-
-      {/* ⚠️ PRODUCTION SECURITY MONITOR (จะแจ้งเตือนเมื่อระบบมองไม่เห็นสิทธิ์จริงของคุณบนโฮสต์) */}
-      {!isAdminUser && !isLocalDev && (
-        <div className="max-w-3xl mx-auto px-4 mb-8">
-          <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-xs font-medium text-red-400 space-y-1">
-            <p className="font-bold text-red-500 flex items-center gap-1">🔒 สิทธิ์ล็อกอินปัจจุบันไม่ใช่แอดมิน ({user?.email || 'ยังไม่ได้ล็อกอิน'})</p>
-            <p className="text-zinc-400">AuthContext ตรวจพบว่า Role ปัจจุบันของคุณคือ "{role || 'ไม่มีสิทธิ์'}" ซึ่งไม่ใช่ระดับผู้ดูแลระบบ</p>
-          </div>
-        </div>
-      )}
 
       {/* 📝 ฟอร์มเขียนโพสต์สำหรับ Admin */}
       {isAdmin && (
@@ -357,10 +353,10 @@ export default function Posts() {
 
       {/* 📇 รายการแสดงผลบล็อกบทความ */}
       <div className="max-w-3xl mx-auto px-4 space-y-10">
-        {posts.length === 0 ? (
-          <div className="text-center text-zinc-500 font-mono text-sm py-12">ยังไม่มีบทความที่เผยแพร่ในระบบ</div>
+        {displayedPosts.length === 0 ? (
+          <div className="text-center text-zinc-500 font-mono text-sm py-12">ตอนนี้ยังไม่มีโพสต์</div>
         ) : (
-          posts.map((post) => (
+          displayedPosts.map((post) => (
             <PostCard 
               key={post.id} 
               post={post} 
@@ -375,7 +371,7 @@ export default function Posts() {
         )}
       </div>
 
-      {/* 🛠️ DEV MODE FLOATING PANEL (แสดงให้สลับโหมดได้เมื่อล็อกอินผ่านสิทธิ์แอดมินสำเร็จ) */}
+      {/* 🛠️ DEV MODE FLOATING PANEL */}
       {(isLocalDev || isAdminUser) && (
         <div className="fixed bottom-4 right-4 z-50 bg-zinc-900 border border-zinc-800 p-3 rounded-2xl shadow-xl flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
@@ -420,7 +416,11 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
   }, [post.id]);
 
   return (
-    <article className="bg-white dark:bg-zinc-900 border border-slate-200/60 dark:border-zinc-800/60 rounded-3xl p-6 md:p-8 shadow-sm hover:shadow-md transition-all duration-300 space-y-5 relative">
+    <article className={`bg-white dark:bg-zinc-900 border rounded-3xl p-6 md:p-8 shadow-sm hover:shadow-md transition-all duration-300 space-y-5 relative ${
+      post.is_hidden 
+        ? 'opacity-70 border-red-500/30 bg-red-500/[0.01] dark:bg-red-500/[0.01]' 
+        : 'border-slate-200/60 dark:border-zinc-800/60'
+    }`}>
       
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 dark:text-zinc-500 font-medium">
         <div className="flex items-center gap-4">
@@ -431,14 +431,19 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
         <div className="flex items-center gap-2">
           {isAdmin && (
             <div className="flex items-center gap-2 border border-amber-500/20 bg-amber-500/5 px-2.5 py-1 rounded-xl text-[10px] text-amber-500 font-bold">
+              {/* ปุ่มควบคุมฟังก์ชันซ่อน/แสดงโพสต์ */}
+              <button onClick={() => togglePostSetting(post.id, 'is_hidden', post.is_hidden)} className="hover:underline text-amber-600 dark:text-amber-400">
+                {post.is_hidden ? "👁️ แสดงโพสต์" : "🚫 ซ่อนโพสต์"}
+              </button>
+              <span className="text-zinc-300 dark:text-zinc-700">|</span>
               <button onClick={() => togglePostSetting(post.id, 'is_download_enabled', post.is_download_enabled)} className="hover:underline">
                 {post.is_download_enabled ? "🔓 ดาวน์โหลดเปิด" : "🔒 ดาวน์โหลดปิด"}
               </button>
-              <span className="text-zinc-700">|</span>
+              <span className="text-zinc-300 dark:text-zinc-700">|</span>
               <button onClick={() => togglePostSetting(post.id, 'is_discuss_enabled', post.is_discuss_enabled)} className="hover:underline">
                 {post.is_discuss_enabled ? "🔓 คอมเมนต์เปิด" : "🔒 คอมเมนต์ปิด"}
               </button>
-              <span className="text-zinc-700">|</span>
+              <span className="text-zinc-300 dark:text-zinc-700">|</span>
               <button onClick={() => handleDeletePost(post.id)} className="text-red-400 hover:text-red-500">
                 <Trash2 className="w-3 h-3 inline" />
               </button>
@@ -449,7 +454,14 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
       </div>
 
       <div className="space-y-2">
-        <h2 className="text-xl md:text-2xl font-extrabold text-slate-950 dark:text-zinc-100 tracking-tight leading-tight">{post.title}</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-xl md:text-2xl font-extrabold text-slate-950 dark:text-zinc-100 tracking-tight leading-tight">{post.title}</h2>
+          {post.is_hidden && (
+            <span className="bg-red-500/10 border border-red-500/30 text-red-500 px-2 py-0.5 rounded-lg text-[10px] font-bold shrink-0">
+              🚫 ซ่อนอยู่ (เฉพาะแอดมินที่เห็น)
+            </span>
+          )}
+        </div>
         <p className="text-sm font-medium text-slate-500 dark:text-zinc-400 border-l-2 border-blue-500 pl-3 py-0.5">{post.summary}</p>
       </div>
 
