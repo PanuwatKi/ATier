@@ -13,7 +13,8 @@ import {
   Trash2,
   Award,
   Image as ImageIcon,
-  Loader2
+  Loader2,
+  Edit2 // นำเข้าไอคอนแก้ไขข้อมูล
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext'; 
 import { supabase } from '../supabaseClient'; 
@@ -23,6 +24,10 @@ export default function Home() {
   // เช็คสิทธิ์ว่าเป็นแอดมินหรือไม่
   const isAdmin = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin';
 
+  // ✨ State สำหรับสลับโหมดมุมมอง (เปิดให้ Admin สลับเป็น User View ได้)
+  const [isAdminView, setIsAdminView] = useState(true);
+  const showAdminFeatures = isAdmin && isAdminView;
+
   // State จัดการข้อมูลสมาชิกจาก Database
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,10 +35,25 @@ export default function Home() {
   // State จัดการ Modals และการอัปโหลดรูปภาพ
   const [selectedMember, setSelectedMember] = useState(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false); // ✨ State ควบคุม Modal แก้ไข
   const [isUploading, setIsUploading] = useState(false);
   
   // State สำหรับฟอร์มเพิ่มสมาชิกใหม่
   const [newMember, setNewMember] = useState({
+    name: '',
+    study: '',
+    university: '',
+    imageUrl: '',
+    phone: '',
+    ig: '',
+    line: '',
+    email: '',
+    awards: ''
+  });
+
+  // ✨ State สำหรับฟอร์มแก้ไขข้อมูลสมาชิกเก่า
+  const [editForm, setEditForm] = useState({
+    id: null,
     name: '',
     study: '',
     university: '',
@@ -67,8 +87,8 @@ export default function Home() {
     fetchMembers();
   }, []);
 
-  // ฟังก์ชัน 2: จัดการอัปโหลดรูปภาพเข้าสู่ Storage Bucket
-  const handleImageUpload = async (e) => {
+  // ฟังก์ชัน 2: จัดการอัปโหลดรูปภาพเข้าสู่ Storage Bucket (รอบนี้รองรับทั้งตอนเพิ่มและแก้ไข)
+  const handleImageUpload = async (e, type = 'add') => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -88,7 +108,11 @@ export default function Home() {
         .from('member-avatars')
         .getPublicUrl(filePath);
 
-      setNewMember(prev => ({ ...prev, imageUrl: data.publicUrl }));
+      if (type === 'add') {
+        setNewMember(prev => ({ ...prev, imageUrl: data.publicUrl }));
+      } else {
+        setEditForm(prev => ({ ...prev, imageUrl: data.publicUrl }));
+      }
     } catch (error) {
       alert('อัปโหลดรูปภาพล้มเหลว: ' + error.message);
     } finally {
@@ -131,6 +155,47 @@ export default function Home() {
       }
     } catch (error) {
       alert('ไม่สามารถเพิ่มข้อมูลสมาชิกได้: ' + error.message);
+    }
+  };
+
+  // ✨ ฟังก์ชันสำหรับส่งข้อมูลอัปเดตสมาชิกเดิมไปยัง Supabase
+  const handleUpdateMember = async (e) => {
+    e.preventDefault();
+    if (isUploading) return alert("กรุณารอให้อัปโหลดรูปภาพเสร็จสิ้นก่อนครับ");
+    if (!editForm.name || !editForm.study) return alert("กรุณากรอกชื่อและสาขาวิชา");
+
+    const itemToUpdate = {
+      name: editForm.name,
+      study: editForm.study,
+      university: editForm.university || '--',
+      imageUrl: editForm.imageUrl || null, 
+      phone: editForm.phone || '--',
+      ig: editForm.ig || '--',
+      line: editForm.line || '--',
+      email: editForm.email || '--',
+      awards: editForm.awards ? editForm.awards.split(',').map(a => a.trim()).filter(Boolean) : []
+    };
+
+    try {
+      const { data, error } = await supabase
+        .from('members')
+        .update(itemToUpdate)
+        .eq('id', editForm.id)
+        .select();
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        // อัปเดต State รายชื่อหน้าร้านค้าทันที
+        setMembers(prev => prev.map(m => m.id === editForm.id ? data[0] : m));
+        // ถ้าผู้ใช้กำลังเปิดหน้าต่างรายละเอียดของคนนั้นอยู่ ให้ข้อมูลเปลี่ยนตามด้วย
+        if (selectedMember && selectedMember.id === editForm.id) {
+          setSelectedMember(data[0]);
+        }
+        setIsEditModalOpen(false);
+      }
+    } catch (error) {
+      alert('ไม่สามารถแก้ไขข้อมูลสมาชิกได้: ' + error.message);
     }
   };
 
@@ -186,20 +251,49 @@ export default function Home() {
     );
   }
 
-  // สร้าง Component การ์ดสมาชิกเพื่อเอาไปใช้ซ้ำในโหมดสไลด์และโหมดปกติ
+  // เคลื่อนย้ายปุ่มกดแก้ไขข้อมูลมาใส่ไว้ในการ์ด
   const renderMemberCard = (member, uniqueKey) => (
     <div 
       key={uniqueKey}
       onClick={() => setSelectedMember(member)}
       className="group relative cursor-pointer overflow-hidden rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm hover:shadow-md transition-all duration-200 w-[300px] sm:w-[340px] md:w-auto flex-shrink-0"
     >
-      {isAdmin && (
-        <button 
-          onClick={(e) => handleDeleteMember(member.id, e)}
-          className="absolute top-3 right-3 p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 opacity-0 group-hover:opacity-100 transition-all z-10"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
+      {/* ส่วนควบคุมความปลอดภัยของแอดมิน */}
+      {showAdminFeatures && (
+        <div className="absolute top-3 right-3 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-all z-10">
+          {/* ปุ่มแก้ไขข้อมูลตัวการ์ดสั้น */}
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditForm({
+                id: member.id,
+                name: member.name,
+                study: member.study,
+                university: member.university === '--' ? '' : member.university,
+                imageUrl: member.imageUrl || '',
+                phone: member.phone === '--' ? '' : member.phone,
+                ig: member.ig === '--' ? '' : member.ig,
+                line: member.line === '--' ? '' : member.line,
+                email: member.email === '--' ? '' : member.email,
+                awards: member.awards ? member.awards.join(', ') : ''
+              });
+              setIsEditModalOpen(true);
+            }}
+            className="p-2 text-slate-400 hover:text-blue-500 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/20"
+            title="แก้ไขข้อมูล"
+          >
+            <Edit2 className="w-4 h-4" />
+          </button>
+          
+          {/* ปุ่มลบข้อมูล */}
+          <button 
+            onClick={(e) => handleDeleteMember(member.id, e)}
+            className="p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20"
+            title="ลบสมาชิก"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
       )}
 
       <div className="flex items-center space-x-4">
@@ -229,7 +323,7 @@ export default function Home() {
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 overflow-hidden">
       
-      {/* สไตล์จำลองการทำ Marquee Slider (รันใน Vercel ได้ฉลุย ไม่ต้องพึ่งไลบรารีอื่น) */}
+      {/* สไตล์จำลองการทำ Marquee Slider */}
       <style>{`
         @keyframes customMarquee {
           0% { transform: translateX(0); }
@@ -245,33 +339,49 @@ export default function Home() {
         }
       `}</style>
 
-      <div className="flex justify-between items-center mb-8">
+      {/* แถบหัวข้อหลักและตัวสลับโหมด View */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Team Members</h1>
           <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">รายชื่อและข้อมูลผู้ติดต่อของสมาชิกภายในทีม</p>
         </div>
-        {isAdmin && (
-          <button 
-            onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl active:scale-95 transition-all shadow-md shadow-blue-500/10"
-          >
-            <Plus className="w-4 h-4" />
-            <span>เพิ่มสมาชิก</span>
-          </button>
-        )}
+        <div className="flex items-center space-x-3 w-full sm:w-auto justify-end">
+          {/* ✨ ปุ่มสลับโหมดมุมมองสำหรับแอดมิน */}
+          {isAdmin && (
+            <button 
+              onClick={() => setIsAdminView(!isAdminView)}
+              className={`flex items-center space-x-2 px-4 py-2.5 font-semibold rounded-xl active:scale-95 transition-all border text-sm ${
+                isAdminView 
+                  ? 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/20 dark:border-amber-900/50 dark:text-amber-400' 
+                  : 'bg-slate-100 border-slate-200 text-slate-700 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300'
+              }`}
+            >
+              <Eye className="w-4 h-4" />
+              <span>{isAdminView ? 'สลับเป็น User View' : 'สลับเป็น Admin View'}</span>
+            </button>
+          )}
+          {/* แสดงปุ่มเพิ่มสมาชิกเมื่ออยู่ในโหมด Admin Features เท่านั้น */}
+          {showAdminFeatures && (
+            <button 
+              onClick={() => setIsAddModalOpen(true)}
+              className="flex items-center space-x-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl active:scale-95 transition-all shadow-md shadow-blue-500/10 text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              <span>เพิ่มสมาชิก</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* เงื่อนไขแสดงผล: มีมากกว่า 3 คน จะทำการเลื่อน Slide ไปเรื่อยๆ ไร้รอยต่อ */}
       {members.length > 3 ? (
         <div className="relative w-full overflow-hidden py-4 mask-gradient bg-slate-50/30 dark:bg-zinc-950/10 rounded-3xl border border-slate-100 dark:border-zinc-900/50 p-4">
           <div className="animate-custom-marquee space-x-6 pr-6">
-            {/* โคลนข้อมูลออกมา 2 ชุดเพื่อให้ Slider วนรอบแบบ Seamless ไร้รอยสะดุด */}
             {members.map((member, index) => renderMemberCard(member, `slide-1-${member.id}-${index}`))}
             {members.map((member, index) => renderMemberCard(member, `slide-2-${member.id}-${index}`))}
           </div>
         </div>
       ) : (
-        /* แสดงเป็น Grid ปกติหากสมาชิกมีจำนวนน้อยกว่าหรือเท่ากับ 3 คน */
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           {members.map((member) => renderMemberCard(member, `grid-${member.id}`))}
         </div>
@@ -279,11 +389,37 @@ export default function Home() {
 
       {/* MODAL 1: แสดงรายละเอียดสมาชิก */}
       {selectedMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-2xl p-6 shadow-xl relative border border-slate-100 dark:border-zinc-800">
+            {/* ปุ่มปิด Modal */}
             <button onClick={() => setSelectedMember(null)} className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200 rounded-lg">
               <X className="w-5 h-5" />
             </button>
+
+            {/* ✨ ปุ่มแก้ไขข้อมูลด่วนจากหน้า Modal รายละเอียด */}
+            {showAdminFeatures && (
+              <button 
+                onClick={() => {
+                  setEditForm({
+                    id: selectedMember.id,
+                    name: selectedMember.name,
+                    study: selectedMember.study,
+                    university: selectedMember.university === '--' ? '' : selectedMember.university,
+                    imageUrl: selectedMember.imageUrl || '',
+                    phone: selectedMember.phone === '--' ? '' : selectedMember.phone,
+                    ig: selectedMember.ig === '--' ? '' : selectedMember.ig,
+                    line: selectedMember.line === '--' ? '' : selectedMember.line,
+                    email: selectedMember.email === '--' ? '' : selectedMember.email,
+                    awards: selectedMember.awards ? selectedMember.awards.join(', ') : ''
+                  });
+                  setIsEditModalOpen(true);
+                }}
+                className="absolute top-4 left-4 p-1.5 text-slate-400 hover:text-blue-500 rounded-lg"
+                title="แก้ไขข้อมูลสมาชิกคนนี้"
+              >
+                <Edit2 className="w-4 h-4" />
+              </button>
+            )}
 
             <div className="flex flex-col items-center text-center pb-5 border-b border-slate-100 dark:border-zinc-800">
               <div className="w-20 h-20 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden flex items-center justify-center mb-3 border">
@@ -307,7 +443,7 @@ export default function Home() {
                 { key: 'email', label: 'อีเมล', val: selectedMember.email, icon: Mail },
               ].map((item) => {
                 const isVisible = selectedMember.visibility?.[item.key] !== false;
-                if (!isAdmin && !isVisible) return null;
+                if (!showAdminFeatures && !isVisible) return null;
 
                 return (
                   <div key={item.key} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-zinc-950/40 border border-slate-100 dark:border-zinc-800/60">
@@ -318,7 +454,7 @@ export default function Home() {
                         <p className={`text-sm ${!isVisible ? 'line-through text-slate-400 dark:text-zinc-600' : 'font-medium text-slate-800 dark:text-zinc-200'}`}>{item.val}</p>
                       </div>
                     </div>
-                    {isAdmin && (
+                    {showAdminFeatures && (
                       <button 
                         onClick={() => toggleVisibility(item.key)} 
                         className={`p-1.5 rounded-lg border transition-colors ${isVisible ? 'text-slate-400 hover:bg-slate-100 dark:hover:bg-zinc-800' : 'text-red-500 bg-red-50 dark:bg-red-950/20'}`}
@@ -359,7 +495,6 @@ export default function Home() {
             <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-zinc-50">เพิ่มสมาชิกใหม่เข้าระบบ</h2>
 
             <form onSubmit={handleAddMember} className="space-y-4">
-              {/* จุดอัปโหลดรูปภาพ */}
               <div className="flex flex-col items-center justify-center p-4 border border-dashed rounded-xl bg-slate-50 dark:bg-zinc-950/20">
                 <label className="cursor-pointer flex flex-col items-center justify-center space-y-1">
                   {isUploading ? (
@@ -372,7 +507,7 @@ export default function Home() {
                       <span className="text-xs text-blue-600 font-medium">กดเพื่ออัปโหลดรูปภาพโปรไฟล์</span>
                     </>
                   )}
-                  <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                  <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'add')} className="hidden" />
                 </label>
               </div>
 
@@ -417,6 +552,80 @@ export default function Home() {
                 className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-400 text-white font-semibold rounded-xl active:scale-95 transition-all mt-2 text-sm shadow-md shadow-blue-500/10"
               >
                 บันทึกข้อมูลสมาชิก
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ✨ MODAL 3: ฟอร์มแก้ไขข้อมูลสมาชิกเดิม (ดึงค่ามาใส่อัตโนมัติ) */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-lg bg-white dark:bg-zinc-900 rounded-2xl p-6 shadow-xl relative border my-8">
+            <button type="button" onClick={() => setIsEditModalOpen(false)} className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+              <X className="w-5 h-5" />
+            </button>
+            <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-zinc-50">แก้ไขข้อมูลสมาชิก</h2>
+
+            <form onSubmit={handleUpdateMember} className="space-y-4">
+              {/* เปลี่ยนรูปภาพสำหรับแก้ไข */}
+              <div className="flex flex-col items-center justify-center p-4 border border-dashed rounded-xl bg-slate-50 dark:bg-zinc-950/20">
+                <label className="cursor-pointer flex flex-col items-center justify-center space-y-1">
+                  {isUploading ? (
+                    <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                  ) : editForm.imageUrl ? (
+                    <img src={editForm.imageUrl} alt="preview" className="w-16 h-16 rounded-full object-cover border" />
+                  ) : (
+                    <>
+                      <ImageIcon className="w-6 h-6 text-slate-400" />
+                      <span className="text-xs text-blue-600 font-medium">กดเพื่อเปลี่ยนรูปภาพโปรไฟล์</span>
+                    </>
+                  )}
+                  <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, 'edit')} className="hidden" />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-400">ชื่อ-นามสกุล *</label>
+                  <input type="text" required value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-400">ตำแหน่ง/สาขาที่ศึกษา *</label>
+                  <input type="text" required value={editForm.study} onChange={e => setEditForm({...editForm, study: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold mb-1 text-slate-400">สถาบันการศึกษา / หน่วยงาน</label>
+                  <input type="text" value={editForm.university} onChange={e => setEditForm({...editForm, university: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-400">เบอร์โทรศัพท์</label>
+                  <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-400">Instagram</label>
+                  <input type="text" value={editForm.ig} onChange={e => setEditForm({...editForm, ig: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-400">Line ID</label>
+                  <input type="text" value={editForm.line} onChange={e => setEditForm({...editForm, line: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-400">อีเมล</label>
+                  <input type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold mb-1 text-slate-400">รางวัลที่ได้รับ (คั่นด้วยเครื่องหมายจุลภาค `,` )</label>
+                  <textarea value={editForm.awards} onChange={e => setEditForm({...editForm, awards: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 h-16 text-sm resize-none text-slate-900 dark:text-zinc-100" />
+                </div>
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={isUploading}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-400 text-white font-semibold rounded-xl active:scale-95 transition-all mt-2 text-sm shadow-md shadow-blue-500/10"
+              >
+                อัปเดตข้อมูลสมาชิก
               </button>
             </form>
           </div>
