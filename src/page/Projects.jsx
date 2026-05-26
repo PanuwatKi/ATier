@@ -186,10 +186,10 @@ export default function Projects() {
               <span>Innovation Hub</span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-slate-900 via-blue-600 to-indigo-600 dark:from-white dark:via-zinc-200 dark:to-zinc-400 bg-clip-text text-transparent">
-              Engineering Matrix
+              Adusaurus Projects
             </h1>
             <p className="mt-2 text-sm text-slate-500 dark:text-zinc-400 max-w-xl">
-              คลังเก็บรวบรวมโปรเจกต์ นวัตกรรม และโครงงานเทคโนโลยีชั้นนำที่ขับเคลื่อนด้วยการวิจัยและพัฒนาซอฟต์แวร์ระดับสูง
+              Project Storage
             </p>
           </div>
 
@@ -214,7 +214,7 @@ export default function Projects() {
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-md shadow-blue-500/10 active:scale-95 transition-all"
               >
                 <Plus size={14} />
-                <span>Create Asset</span>
+                <span>Create Project</span>
               </button>
             )}
           </div>
@@ -226,12 +226,12 @@ export default function Projects() {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
             <Loader2 className="animate-spin text-blue-600" size={32} />
-            <p className="text-xs text-slate-400">กำลังเชื่อมต่อฐานข้อมูลภายนอก...</p>
+            <p className="text-xs text-slate-400">Loading... ถ้านานเกินไปให้ไปที่ atier-rouge.vercel.app แล้วลองอีกครั้งนะครับ...</p>
           </div>
         ) : projects.length === 0 ? (
           <div className="text-center py-20 bg-white dark:bg-zinc-900 rounded-3xl border border-slate-100 dark:border-zinc-900 shadow-sm">
             <FolderGit2 className="mx-auto text-slate-300 dark:text-zinc-700 mb-3" size={40} />
-            <p className="text-sm font-medium text-slate-400">ยังไม่มีข้อมูลโปรเจกต์ในระบบ</p>
+            <p className="text-sm font-medium text-slate-400">There are currently no published project.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
