@@ -12,7 +12,8 @@ import {
   Code,
   Sparkles,
   Image as ImageIcon, // นำเข้าไอคอนสำหรับอัปโหลดรูป
-  Loader2 // นำเข้าตัวโหลดแอนิเมชัน
+  Loader2, // นำเข้าตัวโหลดแอนิเมชัน
+  Trash2
 } from 'lucide-react';
 
 export default function Projects() {
@@ -32,22 +33,26 @@ export default function Projects() {
   const [selectedProject, setSelectedProject] = useState(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
-  // Form Fields State
+  // State สำหรับควบคุมฟอร์มกรอกข้อมูลโปรเจกต์ใหม่
   const [formTitle, setFormTitle] = useState('');
   const [formDesc, setFormDesc] = useState('');
   const [formLongDesc, setFormLongDesc] = useState('');
-  const [formImage, setFormImage] = useState(''); // จะเก็บเป็น Public URL หลังอัปโหลดเสร็จ
+  const [formImage, setFormImage] = useState('');
   const [formDemo, setFormDemo] = useState('');
   const [formTags, setFormTags] = useState('');
 
-  // ฟังก์ชันดึงข้อมูลโปรเจกต์จาก Supabase
+  // ดึงข้อมูลจาก Supabase เมื่อเปิดหน้าเว็บ
+  useEffect(() => {
+    fetchProjects();
+  }, []);
+
   const fetchProjects = async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
         .from('projects')
         .select('*')
-        .order('id', { ascending: false }); // เอาโปรเจกต์ใหม่ขึ้นก่อน
+        .order('id', { ascending: false });
 
       if (error) throw error;
       setProjects(data || []);
@@ -58,11 +63,7 @@ export default function Projects() {
     }
   };
 
-  useEffect(() => {
-    fetchProjects();
-  }, []);
-
-  // ฟังก์ชันอัปโหลดรูปภาพไปยัง Supabase Storage
+  // ฟังก์ชันช่วยจัดการอัปโหลดรูปภาพขึ้น Supabase Storage
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -70,30 +71,30 @@ export default function Projects() {
     try {
       setIsUploading(true);
       const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
-      const filePath = `projects/${fileName}`;
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `project-covers/${fileName}`;
 
-      // อัปโหลดไปยังคลังเก็บภาพชื่อ project-images
+      // อัปโหลดไปยัง bucket ที่ชื่อว่า 'assets' (ปรับชื่อตามของคุณได้ครับ)
       const { error: uploadError } = await supabase.storage
-        .from('project-images')
+        .from('assets')
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
-      // ดึงลิงก์ Public URL ออกมาใช้งาน
-      const { data } = supabase.storage
-        .from('project-images')
+      // ดึง Public URL ของรูปภาพกลับมาใช้งาน
+      const { data: { publicUrl } } = supabase.storage
+        .from('assets')
         .getPublicUrl(filePath);
 
-      setFormImage(data.publicUrl);
+      setFormImage(publicUrl);
     } catch (error) {
-      alert('อัปโหลดรูปภาพโครงการล้มเหลว: ' + error.message);
+      alert('ไม่สามารถอัปโหลดรูปภาพได้: ' + error.message);
     } finally {
       setIsUploading(false);
     }
   };
 
-  // ฟังก์ชันบันทึกโปรเจกต์ใหม่ลงฐานข้อมูล
+  // ฟังก์ชันบันทึกโปรเจกต์ใหม่ลงฐานข้อมูล (เวอร์ชันแก้ไขอาการกดแล้วนิ่ง)
   const handleAddProject = async (e) => {
     e.preventDefault();
     if (isUploading) return alert("กรุณารอให้อัปโหลดรูปภาพเสร็จสิ้นก่อนครับ");
@@ -119,341 +120,350 @@ export default function Projects() {
         .insert([newProject])
         .select();
 
+      // บรรทัดดีบักตรวจสอบค่าใน Console (กด F12 ดูได้)
+      console.log("Supabase Data:", data);
+      console.log("Supabase Error:", error);
+
       if (error) throw error;
 
       if (data && data.length > 0) {
+        // กรณีดึงข้อมูลกลับมาได้ทันที
         setProjects(prev => [data[0], ...prev]);
         setIsAddModalOpen(false);
-        
-        // Reset fields
-        setFormTitle('');
-        setFormDesc('');
-        setFormLongDesc('');
-        setFormImage('');
-        setFormDemo('');
-        setFormTags('');
+        clearForm();
+        alert("บันทึกโปรเจกต์สำเร็จเรียบร้อยครับ! 🎉");
+      } else {
+        // ดักจับกรณีบันทึกสำเร็จ แต่ค่าอาเรย์ส่งกลับดีเลย์จากสิทธิ์ RLS
+        alert("เซฟข้อมูลลงฐานข้อมูลสำเร็จแล้ว! ระบบจะทำการปิดหน้าต่างและดึงข้อมูลใหม่ให้อัตโนมัติครับ");
+        setIsAddModalOpen(false);
+        clearForm();
+        fetchProjects(); // บังคับรีเฟรชเรียกค่าใหม่ล่าสุดจากเซิร์ฟเวอร์
       }
     } catch (error) {
       alert('ไม่สามารถบันทึกโปรเจกต์ได้: ' + error.message);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-      </div>
-    );
-  }
+  // ฟังก์ชันลบโปรเจกต์
+  const handleDeleteProject = async (id, e) => {
+    e.stopPropagation(); // ป้องกันไม่ให้ไปเปิดกล่อง Modal รายละเอียดโปรเจกต์
+    if (!window.confirm('คุณต้องการลบโปรเจกต์นี้ใช่หรือไม่?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      setProjects(prev => prev.filter(p => p.id !== id));
+      alert('ลบโปรเจกต์สำเร็จเรียบร้อยครับ!');
+    } catch (error) {
+      alert('ไม่สามารถลบโปรเจกต์ได้: ' + error.message);
+    }
+  };
+
+  const clearForm = () => {
+    setFormTitle('');
+    setFormDesc('');
+    setFormLongDesc('');
+    setFormImage('');
+    setFormDemo('');
+    setFormTags('');
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-50 py-12 transition-colors duration-200">
-      
-      {/* Top Controls Bar */}
-      <div className="max-w-6xl mx-auto px-4 mb-12 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold text-sm tracking-wider uppercase">
-            <FolderGit2 className="w-4 h-4" /> Adusaurus Projects
+    <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-50 transition-colors duration-300 pb-20">
+      {/* Header Banner */}
+      <div className="relative overflow-hidden bg-white dark:bg-zinc-900 border-b border-slate-200 dark:border-zinc-900 py-12 px-6 sm:px-12 lg:px-24 transition-colors">
+        <div className="absolute top-0 right-0 -mt-12 -mr-12 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 -mb-12 -ml-12 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+        
+        <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-6 max-w-7xl mx-auto">
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 text-xs font-semibold mb-3 border border-blue-100 dark:border-blue-900/30">
+              <FolderGit2 size={12} />
+              <span>Innovation Hub</span>
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-slate-900 via-blue-600 to-indigo-600 dark:from-white dark:via-zinc-200 dark:to-zinc-400 bg-clip-text text-transparent">
+              Engineering Matrix
+            </h1>
+            <p className="mt-2 text-sm text-slate-500 dark:text-zinc-400 max-w-xl">
+              คลังเก็บรวบรวมโปรเจกต์ นวัตกรรม และโครงงานเทคโนโลยีชั้นนำที่ขับเคลื่อนด้วยการวิจัยและพัฒนาซอฟต์แวร์ระดับสูง
+            </p>
           </div>
-          <h1 className="text-4xl font-extrabold tracking-tight mt-1 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 dark:from-white dark:via-zinc-200 dark:to-zinc-500 bg-clip-text text-transparent">
-            Engineering Initiatives
-          </h1>
-        </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-          {/* ซ่อนปุ่มสลับมุมมองจาก General User: แสดงให้เห็นเฉพาะแอดมินตัวจริงเท่านั้น */}
-          {isAdmin && (
-            <button 
-              onClick={() => setIsAdminView(!isAdminView)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium border text-xs transition-all shadow-sm ${
-                isAdminView 
-                  ? 'bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-400' 
-                  : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800'
-              }`}
-            >
-              <Shield className="w-3.5 h-3.5" />
-              <span>{isAdminView ? 'Admin View' : 'User View'}</span>
-            </button>
-          )}
+          <div className="flex flex-wrap items-center gap-3">
+            {isAdmin && (
+              <button
+                onClick={() => setIsAdminView(!isAdminView)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all shadow-sm ${
+                  isAdminView 
+                    ? 'bg-amber-500 hover:bg-amber-600 text-white' 
+                    : 'bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300'
+                }`}
+              >
+                <Shield size={14} />
+                <span>{isAdminView ? 'Admin Mode: ON' : 'Switch to Admin View'}</span>
+              </button>
+            )}
 
-          {/* ซ่อนปุ่ม Add Project จาก General User */}
-          {showAdminFeatures && (
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs shadow-md shadow-blue-500/10 transition-all transform active:scale-95"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Project</span>
-            </button>
-          )}
+            {showAdminFeatures && (
+              <button
+                onClick={() => setIsAddModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-md shadow-blue-500/10 active:scale-95 transition-all"
+              >
+                <Plus size={14} />
+                <span>Create Asset</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* เงื่อนไขตรวจสอบ: ถ้าหากไม่มี Projects ให้ขึ้นว่า There are currently no published project. */}
-      {projects.length === 0 ? (
-        <div className="max-w-6xl mx-auto px-4 py-16 text-center">
-          <p className="text-lg font-medium text-slate-400 dark:text-zinc-500">
-            There are currently no published project.
-          </p>
-        </div>
-      ) : (
-        /* Projects List Layout Grid */
-        <div className="max-w-6xl mx-auto px-4 space-y-6">
-          {projects.map((project) => (
-            <div
-              key={project.id}
-              onClick={() => setSelectedProject(project)}
-              className="group flex flex-col md:flex-row bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800/80 rounded-2xl shadow-sm hover:shadow-xl hover:border-slate-300 dark:hover:border-zinc-700 transition-all duration-300 overflow-hidden cursor-pointer"
-            >
-              {/* Left Column: Thumbnail Image Window */}
-              <div className="w-full md:w-80 h-52 md:h-auto overflow-hidden relative shrink-0 bg-slate-100 dark:bg-zinc-800">
-                <img
-                  src={project.imageUrl}
-                  alt={project.title}
-                  className="w-full h-full object-cover transform scale-100 group-hover:scale-105 transition-transform duration-500 ease-out"
-                  loading="lazy"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
+      {/* Main Grid Content */}
+      <div className="max-w-7xl mx-auto px-6 sm:px-12 lg:px-24 mt-12">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
+            <Loader2 className="animate-spin text-blue-600" size={32} />
+            <p className="text-xs text-slate-400">กำลังเชื่อมต่อฐานข้อมูลภายนอก...</p>
+          </div>
+        ) : projects.length === 0 ? (
+          <div className="text-center py-20 bg-white dark:bg-zinc-900 rounded-3xl border border-slate-100 dark:border-zinc-900 shadow-sm">
+            <FolderGit2 className="mx-auto text-slate-300 dark:text-zinc-700 mb-3" size={40} />
+            <p className="text-sm font-medium text-slate-400">ยังไม่มีข้อมูลโปรเจกต์ในระบบ</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {projects.map((project) => (
+              <div
+                key={project.id}
+                onClick={() => setSelectedProject(project)}
+                className="group relative flex flex-col bg-white dark:bg-zinc-900 rounded-2xl border border-slate-200/60 dark:border-zinc-900 shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-zinc-800 transition-all duration-300 cursor-pointer overflow-hidden"
+              >
+                {/* Project Image */}
+                <div className="relative aspect-video w-full bg-slate-100 dark:bg-zinc-950 overflow-hidden">
+                  <img
+                    src={project.imageUrl}
+                    alt={project.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  
+                  {/* Delete Button for Admin */}
+                  {showAdminFeatures && (
+                    <button
+                      onClick={(e) => handleDeleteProject(project.id, e)}
+                      className="absolute top-3 right-3 p-2 bg-red-600/90 hover:bg-red-600 text-white rounded-xl shadow-md backdrop-blur-sm transition-colors"
+                      title="ลบโปรเจกต์"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
 
-              {/* Right Column: Text & Content Area */}
-              <div className="flex-1 p-6 md:p-8 flex flex-col justify-between relative">
-                <div className="space-y-3">
-                  {/* Tech Tags Container */}
-                  <div className="flex flex-wrap gap-1.5">
-                    {project.tags && project.tags.map((tag, idx) => (
-                      <span 
-                        key={idx} 
-                        className="px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 border border-slate-200/40 dark:border-zinc-700/40"
+                {/* Card Content */}
+                <div className="flex-1 p-5 flex flex-col justify-between">
+                  <div>
+                    <h3 className="font-bold text-base text-slate-800 dark:text-zinc-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-1">
+                      {project.title}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-zinc-400 mt-2 line-clamp-2 leading-relaxed">
+                      {project.description}
+                    </p>
+                  </div>
+
+                  {/* Tags */}
+                  <div className="mt-4 pt-4 border-t border-slate-50 dark:border-zinc-800/50 flex flex-wrap gap-1.5">
+                    {project.tags?.slice(0, 3).map((tag, i) => (
+                      <span
+                        key={i}
+                        className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800/80 text-slate-600 dark:text-zinc-400 text-[10px] font-medium"
                       >
                         {tag}
                       </span>
                     ))}
-                  </div>
-
-                  {/* Primary Labels */}
-                  <h3 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-zinc-100 tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                    {project.title}
-                  </h3>
-                  
-                  <p className="text-sm text-slate-600 dark:text-zinc-400 font-normal leading-relaxed max-w-3xl line-clamp-3 md:line-clamp-2">
-                    {project.description}
-                  </p>
-                </div>
-
-                {/* Bottom Row Information & Core Action */}
-                <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100 dark:border-zinc-800/60">
-                  <div className="flex items-center gap-4 text-xs text-slate-400 dark:text-zinc-500">
-                    <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {project.date}</span>
-                  </div>
-
-                  <a
-                    href={project.demoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-950 transition-colors group/btn shadow-sm"
-                  >
-                    <span>Try Demo</span>
-                    <ExternalLink className="w-3.5 h-3.5 transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
-                  </a>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* PROJECT CASE STUDY / METRICS VIEW MODAL */}
-      {selectedProject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-950/60 dark:bg-black/80 backdrop-blur-sm" onClick={() => setSelectedProject(null)} />
-          
-          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden z-10 transform scale-100 opacity-100 transition-all animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col">
-            
-            {/* Top Frame Banner Img */}
-            <div className="h-48 md:h-64 relative bg-slate-200 dark:bg-zinc-800 shrink-0">
-              <img src={selectedProject.imageUrl} alt={selectedProject.title} className="w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent" />
-              <button 
-                onClick={() => setSelectedProject(null)}
-                className="absolute top-4 right-4 p-2 rounded-full bg-black/40 hover:bg-black/60 text-white transition-colors backdrop-blur-sm"
-              >
-                <X className="w-4 h-4" />
-              </button>
-              
-              <div className="absolute bottom-4 left-6 right-6 text-white">
-                <span className="text-[10px] uppercase font-bold tracking-widest bg-blue-500 px-2 py-0.5 rounded-md">Project Case File</span>
-                <h2 className="text-xl md:text-3xl font-extrabold tracking-tight mt-1.5">{selectedProject.title}</h2>
-              </div>
-            </div>
-
-            {/* Scrollable Content Base Layout */}
-            <div className="p-6 md:p-8 overflow-y-auto space-y-6">
-              
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-indigo-500" /> Operational Blueprint
-                </h4>
-                <p className="text-sm md:text-base text-slate-700 dark:text-zinc-300 leading-relaxed font-normal">
-                  {selectedProject.longDescription}
-                </p>
-              </div>
-
-              {/* Attributes Layout Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-slate-100 dark:border-zinc-800/80">
-                <div className="p-3 bg-slate-50 dark:bg-zinc-950/40 border border-slate-100 dark:border-zinc-900 rounded-xl space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-zinc-500 flex items-center gap-1">
-                    <Code className="w-3.5 h-3.5" /> Stack Specifications
-                  </span>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {selectedProject.tags && selectedProject.tags.map((tag, idx) => (
-                      <span key={idx} className="text-xs font-medium text-slate-800 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-slate-200/60 dark:border-zinc-700/60 px-2 py-0.5 rounded-md">
-                        {tag}
+                    {project.tags?.length > 3 && (
+                      <span className="px-1.5 py-0.5 rounded-md bg-slate-50 dark:bg-zinc-900 text-slate-400 text-[10px]">
+                        +{project.tags.length - 3}
                       </span>
-                    ))}
+                    )}
                   </div>
                 </div>
-
-                <div className="p-3 bg-slate-50 dark:bg-zinc-950/40 border border-slate-100 dark:border-zinc-900 rounded-xl space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-zinc-500 flex items-center gap-1">
-                    <Users className="w-3.5 h-3.5" /> Systems Engineering Team
-                  </span>
-                  <p className="text-xs font-medium text-slate-700 dark:text-zinc-300 mt-1">
-                    {selectedProject.team && selectedProject.team.join(', ')}
-                  </p>
-                </div>
               </div>
-
-              {/* Footer Anchor Action */}
-              <div className="pt-2 flex justify-end">
-                <a
-                  href={selectedProject.demoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm shadow-md shadow-blue-500/10 transition-colors"
-                >
-                  <span>Launch Live Instance</span>
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              </div>
-
-            </div>
+            ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-
-      {/* ADMIN LEVEL: ADD REPOSITORY DIALOG FORM */}
+      {/* --- ADD ASSET MODAL --- */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-950/60 dark:bg-black/80 backdrop-blur-sm" onClick={() => setIsAddModalOpen(false)} />
-          
-          <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden z-10 transform scale-100 opacity-100 transition-all animate-in fade-in zoom-in-95 duration-200">
-            
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-zinc-800/80 flex justify-between items-center bg-slate-50 dark:bg-zinc-900/50">
-              <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-zinc-100">
-                <Shield className="w-4 h-4 text-amber-500" />
-                <span>Initialize New Project Asset</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <form
+            onSubmit={handleAddProject}
+            className="w-full max-w-xl bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl p-6 relative flex flex-col max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-zinc-800/80">
+              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                <Sparkles size={18} />
+                <h2 className="font-bold text-lg text-slate-800 dark:text-zinc-100">Publish New System</h2>
               </div>
-              <button onClick={() => setIsAddModalOpen(false)} className="p-1 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-zinc-800">
-                <X className="w-4 h-4" />
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400 transition-colors"
+              >
+                <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleAddProject} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+            {/* Input Form Fields */}
+            <div className="space-y-4 py-4 flex-1">
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-1">Project Title</label>
-                <input 
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-1">Asset Title</label>
+                <input
                   type="text" required value={formTitle} onChange={(e) => setFormTitle(e.target.value)}
-                  placeholder="e.g., Nexus Data Matrix Suite"
+                  placeholder="เช่น Smart Light for Green Life"
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-1">Brief Description</label>
-                <textarea 
-                  required rows="2" value={formDesc} onChange={(e) => setFormDesc(e.target.value)}
-                  placeholder="Summarized core concept for the pipeline card display view..."
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 transition-colors resize-none"
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-1">Short Summary (Card View)</label>
+                <input
+                  type="text" required value={formDesc} onChange={(e) => setFormDesc(e.target.value)}
+                  placeholder="คำอธิบายโปรเจกต์แบบสั้นๆ สำหรับแสดงบนหน้าการ์ด"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-1">Detailed Blueprint (Case Study)</label>
-                <textarea 
-                  rows="3" value={formLongDesc} onChange={(e) => setFormLongDesc(e.target.value)}
-                  placeholder="Deep-dive architectural layout showing exactly what structural problems the project resolves..."
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 transition-colors resize-none"
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-1">Detailed Documentation (Markdown Support)</label>
+                <textarea
+                  value={formLongDesc} onChange={(e) => setFormLongDesc(e.target.value)}
+                  placeholder="คำอธิบายและข้อมูลเชิงลึกของโปรเจกต์ ข้อมูลจำเพาะทางวิศวกรรม ขั้นตอน และผลการทดลองวิจัย..."
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 transition-colors h-24 resize-none"
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* แก้ไขส่วนกรอก URL รูปภาพ เป็นช่องสำหรับอัปโหลดไฟล์จริง */}
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-1">Project Cover Image *</label>
-                  <div className="flex flex-col items-center justify-center p-4 border border-dashed rounded-xl bg-slate-50 dark:bg-zinc-950/20 border-slate-200 dark:border-zinc-800">
-                    <label className="cursor-pointer flex flex-col items-center justify-center space-y-1 w-full h-full py-2">
-                      {isUploading ? (
-                        <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
-                      ) : formImage ? (
-                        <div className="flex items-center space-x-2">
-                          <img src={formImage} alt="preview" className="w-16 h-12 object-cover rounded-md border" />
-                          <span className="text-xs text-green-600 font-medium">อัปโหลดรูปภาพเรียบร้อยแล้ว</span>
-                        </div>
-                      ) : (
-                        <>
-                          <ImageIcon className="w-6 h-6 text-slate-400" />
-                          <span className="text-xs text-blue-600 font-medium">กดเลือกไฟล์รูปภาพเพื่ออัปโหลด</span>
-                        </>
-                      )}
-                      <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-                    </label>
-                  </div>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-1">Live Deployment Link</label>
-                  <input 
-                    type="url" required value={formDemo} onChange={(e) => setFormDemo(e.target.value)}
-                    placeholder="https://demo.atier.org/..."
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
+              {/* Upload Covered Image Section */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-1">Cover Image Source</label>
+                <div className="flex gap-2">
+                  <input
+                    type="url" required value={formImage} onChange={(e) => setFormImage(e.target.value)}
+                    placeholder="https://images.unsplash.com/... หรือกดอัปโหลดรูปภาพด้านขวา"
+                    className="flex-1 px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
                   />
+                  <label className="cursor-pointer flex items-center justify-center p-2.5 bg-blue-50 dark:bg-blue-950 hover:bg-blue-100 dark:hover:bg-blue-900 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50 rounded-xl transition-all">
+                    {isUploading ? <Loader2 className="animate-spin" size={18} /> : <ImageIcon size={18} />}
+                    <input type="file" accept="image/*" onChange={handleImageUpload} disabled={isUploading} className="hidden" />
+                  </label>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-1">Production Demo URL</label>
+                <input
+                  type="url" required value={formDemo} onChange={(e) => setFormDemo(e.target.value)}
+                  placeholder="https://demo.atier.org/your-project"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
+                />
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-1">Technology Specifications (Comma Separated)</label>
-                <input 
+                <input
                   type="text" value={formTags} onChange={(e) => setFormTags(e.target.value)}
                   placeholder="React, AWS, Node.js, PyTorch"
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
                 />
               </div>
+            </div>
 
-              <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 dark:border-zinc-800/80">
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-850"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isUploading}
-                  className="px-4 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/10 disabled:bg-slate-400"
-                >
-                  Publish Asset
-                </button>
-              </div>
-            </form>
-
-          </div>
+            {/* Form Actions Footer */}
+            <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 dark:border-zinc-800/80">
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-50 dark:hover:bg-zinc-850 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isUploading}
+                className="px-4 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white transition-all active:scale-95 shadow-md shadow-blue-500/10 flex items-center gap-1.5"
+              >
+                {isUploading && <Loader2 className="animate-spin" size={12} />}
+                <span>Publish Asset</span>
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
+      {/* --- DETAILED VIEW MODAL --- */}
+      {selectedProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-2xl bg-white dark:bg-zinc-900 rounded-3xl border border-slate-200 dark:border-zinc-800 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+            {/* Modal Image Header */}
+            <div className="relative aspect-video w-full bg-slate-100 dark:bg-zinc-950">
+              <img src={selectedProject.imageUrl} alt={selectedProject.title} className="w-full h-full object-cover" />
+              <button
+                onClick={() => setSelectedProject(null)}
+                className="absolute top-4 right-4 p-2 bg-black/40 hover:bg-black/60 text-white rounded-full backdrop-blur-md transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Scrollable Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              <div>
+                <h2 className="text-xl font-extrabold text-slate-800 dark:text-zinc-50">{selectedProject.title}</h2>
+                <div className="flex flex-wrap items-center gap-4 text-slate-400 text-xs mt-2">
+                  <div className="flex items-center gap-1"><Calendar size={13} /> <span>{selectedProject.date}</span></div>
+                  <div className="flex items-center gap-1"><Users size={13} /> <span>{selectedProject.team?.join(', ')}</span></div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                  <Code size={13} /> Specification Layer
+                </h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedProject.tags?.map((tag, i) => (
+                    <span key={i} className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 text-xs font-medium">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-zinc-800/80">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">Core Architecture / Documentation</h4>
+                <p className="text-sm text-slate-600 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                  {selectedProject.longDescription}
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 dark:bg-zinc-900/60 border-t border-slate-100 dark:border-zinc-800/80 flex justify-end">
+              <a
+                href={selectedProject.demoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-md shadow-blue-500/10 active:scale-95 transition-all"
+              >
+                <span>Launch Live System</span>
+                <ExternalLink size={13} />
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
