@@ -45,7 +45,7 @@ export default function Home() {
     awards: ''
   });
 
-  // ฟังก์ชัน 1: ดึงข้อมูลสมาชิกทั้งหมดจาก Supabase Database ตัวจริง
+  // ฟังก์ชัน 1: ดึงข้อมูลสมาชิกทั้งหมดจาก Supabase Database
   const fetchMembers = async () => {
     try {
       setLoading(true);
@@ -111,7 +111,6 @@ export default function Home() {
       ig: newMember.ig || '--',
       line: newMember.line || '--',
       email: newMember.email || '--',
-      // แยกข้อความด้วยจุลภาคออกมาเป็น Array ของรางวัล
       awards: newMember.awards ? newMember.awards.split(',').map(a => a.trim()).filter(Boolean) : [],
       hidden: false,
       visibility: { phone: true, ig: true, line: true, email: true }
@@ -187,8 +186,65 @@ export default function Home() {
     );
   }
 
+  // สร้าง Component การ์ดสมาชิกเพื่อเอาไปใช้ซ้ำในโหมดสไลด์และโหมดปกติ
+  const renderMemberCard = (member, uniqueKey) => (
+    <div 
+      key={uniqueKey}
+      onClick={() => setSelectedMember(member)}
+      className="group relative cursor-pointer overflow-hidden rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm hover:shadow-md transition-all duration-200 w-[300px] sm:w-[340px] md:w-auto flex-shrink-0"
+    >
+      {isAdmin && (
+        <button 
+          onClick={(e) => handleDeleteMember(member.id, e)}
+          className="absolute top-3 right-3 p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 opacity-0 group-hover:opacity-100 transition-all z-10"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      )}
+
+      <div className="flex items-center space-x-4">
+        <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden flex items-center justify-center border border-slate-200 dark:border-zinc-700">
+          {member.imageUrl ? (
+            <img src={member.imageUrl} alt={member.name} className="w-full h-full object-cover" />
+          ) : (
+            <User className="w-6 h-6 text-slate-400" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-bold text-base truncate text-slate-900 dark:text-zinc-50">{member.name}</h3>
+          <p className="text-xs text-slate-500 dark:text-zinc-400 truncate mt-0.5">{member.study}</p>
+          <p className="text-[11px] text-blue-600 dark:text-blue-400 truncate mt-1 font-medium">{member.university}</p>
+        </div>
+      </div>
+
+      {member.awards && member.awards.length > 0 && (
+        <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center space-x-2 text-xs text-amber-600 dark:text-amber-400 font-medium">
+          <Award className="w-3.5 h-3.5 flex-shrink-0" />
+          <span className="truncate">{member.awards[0]}</span>
+        </div>
+      )}
+    </div>
+  );
+
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-4 py-8 overflow-hidden">
+      
+      {/* สไตล์จำลองการทำ Marquee Slider (รันใน Vercel ได้ฉลุย ไม่ต้องพึ่งไลบรารีอื่น) */}
+      <style>{`
+        @keyframes customMarquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .animate-custom-marquee {
+          display: flex;
+          width: max-content;
+          animation: customMarquee 25s linear infinite;
+        }
+        .animate-custom-marquee:hover {
+          animation-play-state: paused;
+        }
+      `}</style>
+
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Team Members</h1>
@@ -205,47 +261,21 @@ export default function Home() {
         )}
       </div>
 
-      {/* Grid รายชื่อสมาชิก */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-        {members.map((member) => (
-          <div 
-            key={member.id}
-            onClick={() => setSelectedMember(member)}
-            className="group relative cursor-pointer overflow-hidden rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 shadow-sm hover:shadow-md transition-all duration-200"
-          >
-            {isAdmin && (
-              <button 
-                onClick={(e) => handleDeleteMember(member.id, e)}
-                className="absolute top-3 right-3 p-2 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20 opacity-0 group-hover:opacity-100 transition-all z-10"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
-
-            <div className="flex items-center space-x-4">
-              <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden flex items-center justify-center border border-slate-200 dark:border-zinc-700">
-                {member.imageUrl ? (
-                  <img src={member.imageUrl} alt={member.name} className="w-full h-full object-cover" />
-                ) : (
-                  <User className="w-6 h-6 text-slate-400" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-base truncate">{member.name}</h3>
-                <p className="text-xs text-slate-500 dark:text-zinc-400 truncate mt-0.5">{member.study}</p>
-                <p className="text-[11px] text-blue-600 dark:text-blue-400 truncate mt-1 font-medium">{member.university}</p>
-              </div>
-            </div>
-
-            {member.awards && member.awards.length > 0 && (
-              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center space-x-2 text-xs text-amber-600 dark:text-amber-400 font-medium">
-                <Award className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="truncate">{member.awards[0]}</span>
-              </div>
-            )}
+      {/* เงื่อนไขแสดงผล: มีมากกว่า 3 คน จะทำการเลื่อน Slide ไปเรื่อยๆ ไร้รอยต่อ */}
+      {members.length > 3 ? (
+        <div className="relative w-full overflow-hidden py-4 mask-gradient bg-slate-50/30 dark:bg-zinc-950/10 rounded-3xl border border-slate-100 dark:border-zinc-900/50 p-4">
+          <div className="animate-custom-marquee space-x-6 pr-6">
+            {/* โคลนข้อมูลออกมา 2 ชุดเพื่อให้ Slider วนรอบแบบ Seamless ไร้รอยสะดุด */}
+            {members.map((member, index) => renderMemberCard(member, `slide-1-${member.id}-${index}`))}
+            {members.map((member, index) => renderMemberCard(member, `slide-2-${member.id}-${index}`))}
           </div>
-        ))}
-      </div>
+        </div>
+      ) : (
+        /* แสดงเป็น Grid ปกติหากสมาชิกมีจำนวนน้อยกว่าหรือเท่ากับ 3 คน */
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+          {members.map((member) => renderMemberCard(member, `grid-${member.id}`))}
+        </div>
+      )}
 
       {/* MODAL 1: แสดงรายละเอียดสมาชิก */}
       {selectedMember && (
@@ -263,7 +293,7 @@ export default function Home() {
                   <User className="w-10 h-10 text-slate-400" />
                 )}
               </div>
-              <h2 className="text-xl font-bold">{selectedMember.name}</h2>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-zinc-50">{selectedMember.name}</h2>
               <p className="text-xs text-slate-500 mt-1">{selectedMember.study}</p>
               <p className="text-xs font-semibold text-blue-600 mt-0.5">{selectedMember.university}</p>
             </div>
@@ -285,13 +315,13 @@ export default function Home() {
                       <div className="p-2 bg-white dark:bg-zinc-900 rounded-lg text-slate-400 border"><item.icon className="w-4 h-4" /></div>
                       <div>
                         <p className="text-[10px] uppercase font-bold text-slate-400">{item.label}</p>
-                        <p className={`text-sm ${!isVisible ? 'line-through text-slate-400' : 'font-medium'}`}>{item.val}</p>
+                        <p className={`text-sm ${!isVisible ? 'line-through text-slate-400 dark:text-zinc-600' : 'font-medium text-slate-800 dark:text-zinc-200'}`}>{item.val}</p>
                       </div>
                     </div>
                     {isAdmin && (
                       <button 
                         onClick={() => toggleVisibility(item.key)} 
-                        className={`p-1.5 rounded-lg border transition-colors ${isVisible ? 'text-slate-400 hover:bg-slate-100' : 'text-red-500 bg-red-50 dark:bg-red-950/20'}`}
+                        className={`p-1.5 rounded-lg border transition-colors ${isVisible ? 'text-slate-400 hover:bg-slate-100 dark:hover:bg-zinc-800' : 'text-red-500 bg-red-50 dark:bg-red-950/20'}`}
                       >
                         {isVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                       </button>
@@ -326,7 +356,7 @@ export default function Home() {
             <button type="button" onClick={() => setIsAddModalOpen(false)} className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
               <X className="w-5 h-5" />
             </button>
-            <h2 className="text-xl font-bold mb-4">เพิ่มสมาชิกใหม่เข้าระบบ</h2>
+            <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-zinc-50">เพิ่มสมาชิกใหม่เข้าระบบ</h2>
 
             <form onSubmit={handleAddMember} className="space-y-4">
               {/* จุดอัปโหลดรูปภาพ */}
@@ -349,35 +379,35 @@ export default function Home() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold mb-1 text-slate-400">ชื่อ-นามสกุล *</label>
-                  <input type="text" required value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm" placeholder="เช่น นายภาณุวัฒน์" />
+                  <input type="text" required value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="เช่น นายภาณุวัฒน์" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1 text-slate-400">ตำแหน่ง/สาขาที่ศึกษา *</label>
-                  <input type="text" required value={newMember.study} onChange={e => setNewMember({...newMember, study: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm" placeholder="เช่น Computer Engineer Student" />
+                  <input type="text" required value={newMember.study} onChange={e => setNewMember({...newMember, study: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="เช่น Computer Engineer Student" />
                 </div>
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold mb-1 text-slate-400">สถาบันการศึกษา / หน่วยงาน</label>
-                  <input type="text" value={newMember.university} onChange={e => setNewMember({...newMember, university: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm" placeholder="เช่น Chulalongkorn University" />
+                  <input type="text" value={newMember.university} onChange={e => setNewMember({...newMember, university: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="เช่น Chulalongkorn University" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1 text-slate-400">เบอร์โทรศัพท์</label>
-                  <input type="text" value={newMember.phone} onChange={e => setNewMember({...newMember, phone: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm" placeholder="063-xxx-xxxx" />
+                  <input type="text" value={newMember.phone} onChange={e => setNewMember({...newMember, phone: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="063-xxx-xxxx" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1 text-slate-400">Instagram</label>
-                  <input type="text" value={newMember.ig} onChange={e => setNewMember({...newMember, ig: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm" placeholder="@username" />
+                  <input type="text" value={newMember.ig} onChange={e => setNewMember({...newMember, ig: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="@username" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1 text-slate-400">Line ID</label>
-                  <input type="text" value={newMember.line} onChange={e => setNewMember({...newMember, line: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm" placeholder="ใส่ไอดีไลน์" />
+                  <input type="text" value={newMember.line} onChange={e => setNewMember({...newMember, line: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="ใส่ไอดีไลน์" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1 text-slate-400">อีเมล</label>
-                  <input type="email" value={newMember.email} onChange={e => setNewMember({...newMember, email: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm" placeholder="example@atier.org" />
+                  <input type="email" value={newMember.email} onChange={e => setNewMember({...newMember, email: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="example@atier.org" />
                 </div>
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold mb-1 text-slate-400">รางวัลที่ได้รับ (คั่นด้วยเครื่องหมายจุลภาค `,` ถ้ามีหลายรางวัล)</label>
-                  <textarea value={newMember.awards} onChange={e => setNewMember({...newMember, awards: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 h-16 text-sm resize-none" placeholder="เช่น เหรียญเงิน SSYS 2026, NSC Finalist" />
+                  <textarea value={newMember.awards} onChange={e => setNewMember({...newMember, awards: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 h-16 text-sm resize-none text-slate-900 dark:text-zinc-100" placeholder="เช่น เหรียญเงิน SSYS 2026, NSC Finalist" />
                 </div>
               </div>
 
