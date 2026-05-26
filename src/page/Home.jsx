@@ -342,8 +342,8 @@ export default function Home() {
       {/* แถบหัวข้อหลักและตัวสลับโหมด View */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight">Team Members</h1>
-          <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">รายชื่อและข้อมูลผู้ติดต่อของสมาชิกภายในทีม</p>
+          <h1 className="text-3xl font-extrabold tracking-tight">Adusaurus Team Members</h1>
+          <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">รNames and contact information of team members</p>
         </div>
         <div className="flex items-center space-x-3 w-full sm:w-auto justify-end">
           {/* ✨ ปุ่มสลับโหมดมุมมองสำหรับแอดมิน */}
@@ -357,7 +357,7 @@ export default function Home() {
               }`}
             >
               <Eye className="w-4 h-4" />
-              <span>{isAdminView ? 'สลับเป็น User View' : 'สลับเป็น Admin View'}</span>
+              <span>{isAdminView ? 'Admin View' : 'User View'}</span>
             </button>
           )}
           {/* แสดงปุ่มเพิ่มสมาชิกเมื่ออยู่ในโหมด Admin Features เท่านั้น */}
@@ -367,7 +367,7 @@ export default function Home() {
               className="flex items-center space-x-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl active:scale-95 transition-all shadow-md shadow-blue-500/10 text-sm"
             >
               <Plus className="w-4 h-4" />
-              <span>เพิ่มสมาชิก</span>
+              <span>Add Member</span>
             </button>
           )}
         </div>
@@ -492,7 +492,7 @@ export default function Home() {
             <button type="button" onClick={() => setIsAddModalOpen(false)} className="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
               <X className="w-5 h-5" />
             </button>
-            <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-zinc-50">เพิ่มสมาชิกใหม่เข้าระบบ</h2>
+            <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-zinc-50">Add New Member</h2>
 
             <form onSubmit={handleAddMember} className="space-y-4">
               <div className="flex flex-col items-center justify-center p-4 border border-dashed rounded-xl bg-slate-50 dark:bg-zinc-950/20">
@@ -513,20 +513,20 @@ export default function Home() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold mb-1 text-slate-400">ชื่อ-นามสกุล *</label>
-                  <input type="text" required value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="เช่น นายภาณุวัฒน์" />
+                  <label className="block text-xs font-semibold mb-1 text-slate-400">Name-Surname *</label>
+                  <input type="text" required value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="eg. Panuwat Whatever" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold mb-1 text-slate-400">ตำแหน่ง/สาขาที่ศึกษา *</label>
-                  <input type="text" required value={newMember.study} onChange={e => setNewMember({...newMember, study: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="เช่น Computer Engineer Student" />
+                  <label className="block text-xs font-semibold mb-1 text-slate-400">Role / Major *</label>
+                  <input type="text" required value={newMember.study} onChange={e => setNewMember({...newMember, study: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="eg. Med Student" />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold mb-1 text-slate-400">สถาบันการศึกษา / หน่วยงาน</label>
-                  <input type="text" value={newMember.university} onChange={e => setNewMember({...newMember, university: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="เช่น Chulalongkorn University" />
+                  <label className="block text-xs font-semibold mb-1 text-slate-400">Educational Institution / Organization</label>
+                  <input type="text" value={newMember.university} onChange={e => setNewMember({...newMember, university: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="eg. Tokyo University" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold mb-1 text-slate-400">เบอร์โทรศัพท์</label>
-                  <input type="text" value={newMember.phone} onChange={e => setNewMember({...newMember, phone: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="063-xxx-xxxx" />
+                  <label className="block text-xs font-semibold mb-1 text-slate-400">Phone Number</label>
+                  <input type="text" value={newMember.phone} onChange={e => setNewMember({...newMember, phone: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="099-xxx-xxxx" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1 text-slate-400">Instagram</label>
@@ -534,15 +534,15 @@ export default function Home() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1 text-slate-400">Line ID</label>
-                  <input type="text" value={newMember.line} onChange={e => setNewMember({...newMember, line: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="ใส่ไอดีไลน์" />
+                  <input type="text" value={newMember.line} onChange={e => setNewMember({...newMember, line: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="Your ID Line" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold mb-1 text-slate-400">อีเมล</label>
-                  <input type="email" value={newMember.email} onChange={e => setNewMember({...newMember, email: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="example@atier.org" />
+                  <label className="block text-xs font-semibold mb-1 text-slate-400">Email</label>
+                  <input type="email" value={newMember.email} onChange={e => setNewMember({...newMember, email: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 text-sm text-slate-900 dark:text-zinc-100" placeholder="example@gmail.com" />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold mb-1 text-slate-400">รางวัลที่ได้รับ (คั่นด้วยเครื่องหมายจุลภาค `,` ถ้ามีหลายรางวัล)</label>
-                  <textarea value={newMember.awards} onChange={e => setNewMember({...newMember, awards: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 h-16 text-sm resize-none text-slate-900 dark:text-zinc-100" placeholder="เช่น เหรียญเงิน SSYS 2026, NSC Finalist" />
+                  <label className="block text-xs font-semibold mb-1 text-slate-400">Award (คั่นด้วยเครื่องหมายจุลภาค `,` ถ้ามีหลายรางวัล)</label>
+                  <textarea value={newMember.awards} onChange={e => setNewMember({...newMember, awards: e.target.value})} className="w-full p-2.5 rounded-xl border bg-transparent focus:outline-none focus:border-blue-500 h-16 text-sm resize-none text-slate-900 dark:text-zinc-100" placeholder="eg. Gold Medal, SCiUS Forum 17" />
                 </div>
               </div>
 
