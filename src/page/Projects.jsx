@@ -74,16 +74,16 @@ export default function Projects() {
       const fileName = `${Math.random()}.${fileExt}`;
       const filePath = `project-covers/${fileName}`;
 
-      // อัปโหลดไปยัง bucket ที่ชื่อว่า 'assets' (ปรับชื่อตามของคุณได้ครับ)
+      // 🛠️ แก้ไขจุดนี้: เปลี่ยนชื่อถังเป็น 'project-images' ให้ตรงกับระบบของคุณเรียบร้อยแล้ว
       const { error: uploadError } = await supabase.storage
-        .from('assets')
+        .from('project-images')
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
-      // ดึง Public URL ของรูปภาพกลับมาใช้งาน
+      // 🛠️ แก้ไขจุดนี้: ดึง Public URL ของรูปภาพจากถัง 'project-images'
       const { data: { publicUrl } } = supabase.storage
-        .from('assets')
+        .from('project-images')
         .getPublicUrl(filePath);
 
       setFormImage(publicUrl);
