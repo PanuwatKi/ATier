@@ -344,7 +344,7 @@ export default function Posts() {
       {/* 📇 รายการแสดงผลบล็อกบทความ */}
       <div className="max-w-3xl mx-auto px-4 space-y-10">
         {posts.length === 0 ? (
-          <div className="text-center text-zinc-500 font-mono text-sm py-12">There are currently no published articles.</div>
+          <div className="text-center text-zinc-500 font-mono text-sm py-12">There are currently no published post.</div>
         ) : (
           posts
             .filter(post => !post.is_hidden || isAdmin) // 🛠️ กรองโพสต์: ถ้าถูกซ่อน คนทั่วไปจะไม่เห็น แต่ Admin จะยังมองเห็นอยู่

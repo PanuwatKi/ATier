@@ -343,7 +343,7 @@ export default function Home() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Adusaurus Team Members</h1>
-          <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">รNames and contact information of team members</p>
+          <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">Names and contact information of team members</p>
         </div>
         <div className="flex items-center space-x-3 w-full sm:w-auto justify-end">
           {/* ✨ ปุ่มสลับโหมดมุมมองสำหรับแอดมิน */}

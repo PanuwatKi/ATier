@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../supabaseClient'; // นำเข้า supabase client
 import { 
   Plus, 
   ExternalLink, 
@@ -9,49 +10,25 @@ import {
   Calendar, 
   Users, 
   Code,
-  Sparkles
+  Sparkles,
+  Image as ImageIcon, // นำเข้าไอคอนสำหรับอัปโหลดรูป
+  Loader2 // นำเข้าตัวโหลดแอนิเมชัน
 } from 'lucide-react';
 
-// Premium Initial Projects Data
-const INITIAL_PROJECTS = [
-  {
-    id: 1,
-    title: "DNosis AI Smart Classroom Platform",
-    description: "An advanced ecosystem utilizing computer vision and predictive analytics to optimize classroom layouts, track learning engagement metrics, and streamline multi-media academic delivery structures.",
-    longDescription: "DNosis redefines educational spaces by transforming traditional classrooms into data-aware hubs. Built for the modern educational standard, it integrates seamlessly with cameras and audio inputs to calculate real-time concentration indexes, optimize ambient environmental lighting, and generate automated, micro-topic study summaries for students. The engineering phase involved rigorous edge-computing deployment and sub-50ms synchronization cycles.",
-    imageUrl: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=600&auto=format&fit=crop",
-    demoUrl: "https://demo.atier.org/dnosis",
-    tags: ["React", "Tailwind", "Python", "FastAPI", "OpenCV"],
-    team: ["Thanapat S.", "Chayanon K.", "Nutthamon R."],
-    date: "March 2026"
-  },
-  {
-    id: 2,
-    title: "NanoScribe Bio-Synthesis Analyzer",
-    description: "A machine-learning dashboard processing spectroscopic data to evaluate the structural purity and crystalline efficiency of green-synthesized iron oxide nanoparticles.",
-    longDescription: "Designed for modern biochemistry laboratories, NanoScribe automates the complex kinetics evaluation of eco-friendly nanoparticle production. By feeding UV-Vis spectrophotometry outputs into custom regression algorithms, the system estimates particle diameter distributions and surface energy configurations without requiring destructive structural validation assays. It slashes processing cycles down from days to seconds.",
-    imageUrl: "https://images.unsplash.com/photo-1532187863486-abf9d39d6618?q=80&w=600&auto=format&fit=crop",
-    demoUrl: "https://demo.atier.org/nanoscribe",
-    tags: ["Data Science", "Python", "D3.js", "Tailwind CSS"],
-    team: ["Kornkanok P.", "Teerapat N.", "Pitchapa W."],
-    date: "January 2026"
-  },
-  {
-    id: 3,
-    title: "Aegis Network Topology Shield",
-    description: "An interactive automated security suite designed to visualize high-throughput subnets, capture rogue packets, and trace synthetic ransomware vector injections.",
-    longDescription: "Aegis provides multi-layer tactical monitoring over enterprise subnets. It intercepts packet metadata pipelines via robust low-overhead listeners, rendering real-time geometric graph structures that expose micro-anomalies or structural flaws within routing tables. Includes a simulated sandboxed command terminal designed specifically for CTF red-team training drills and live mitigation testing loops.",
-    imageUrl: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?q=80&w=600&auto=format&fit=crop",
-    demoUrl: "https://demo.atier.org/aegis-shield",
-    tags: ["Next.js", "TypeScript", "Scapy", "WebSockets"],
-    team: ["Nattakit M.", "Phuriwat B."],
-    date: "April 2026"
-  }
-];
-
 export default function Projects() {
-  const [projects, setProjects] = useState(INITIAL_PROJECTS);
-  const [isAdmin, setIsAdmin] = useState(false);
+  // ดึงข้อมูลสิทธิ์จาก AuthContext จริง
+  const { role } = useAuth();
+  const isAdmin = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin';
+
+  // State สำหรับจัดการข้อมูลและการแสดงผล
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isAdminView, setIsAdminView] = useState(true);
+  const [isUploading, setIsUploading] = useState(false); // State ตรวจสอบการอัปโหลดรูป
+
+  // ตรวจสอบฟีเจอร์แอดมิน (ต้องเป็นแอดมินจริง และอยู่ในโหมดแอดมินวิว)
+  const showAdminFeatures = isAdmin && isAdminView;
+
   const [selectedProject, setSelectedProject] = useState(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
@@ -59,38 +36,115 @@ export default function Projects() {
   const [formTitle, setFormTitle] = useState('');
   const [formDesc, setFormDesc] = useState('');
   const [formLongDesc, setFormLongDesc] = useState('');
-  const [formImage, setFormImage] = useState('');
+  const [formImage, setFormImage] = useState(''); // จะเก็บเป็น Public URL หลังอัปโหลดเสร็จ
   const [formDemo, setFormDemo] = useState('');
   const [formTags, setFormTags] = useState('');
 
-  // Handle Submission of New Project
-  const handleAddProject = (e) => {
+  // ฟังก์ชันดึงข้อมูลโปรเจกต์จาก Supabase
+  const fetchProjects = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .order('id', { ascending: false }); // เอาโปรเจกต์ใหม่ขึ้นก่อน
+
+      if (error) throw error;
+      setProjects(data || []);
+    } catch (error) {
+      console.error('Error fetching projects:', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProjects();
+  }, []);
+
+  // ฟังก์ชันอัปโหลดรูปภาพไปยัง Supabase Storage
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+      const filePath = `projects/${fileName}`;
+
+      // อัปโหลดไปยังคลังเก็บภาพชื่อ project-images
+      const { error: uploadError } = await supabase.storage
+        .from('project-images')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // ดึงลิงก์ Public URL ออกมาใช้งาน
+      const { data } = supabase.storage
+        .from('project-images')
+        .getPublicUrl(filePath);
+
+      setFormImage(data.publicUrl);
+    } catch (error) {
+      alert('อัปโหลดรูปภาพโครงการล้มเหลว: ' + error.message);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // ฟังก์ชันบันทึกโปรเจกต์ใหม่ลงฐานข้อมูล
+  const handleAddProject = async (e) => {
     e.preventDefault();
-    if (!formTitle || !formDesc || !formImage || !formDemo) return;
+    if (isUploading) return alert("กรุณารอให้อัปโหลดรูปภาพเสร็จสิ้นก่อนครับ");
+    if (!formTitle || !formDesc || !formImage || !formDemo) return alert("กรุณากรอกข้อมูลให้ครบถ้วน");
+
+    // ดึงเดือนและปีปัจจุบันมาตั้งค่าให้กับโปรเจกต์อัตโนมัติ
+    const currentMonthYear = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
     const newProject = {
-      id: Date.now(),
       title: formTitle,
       description: formDesc,
-      longDescription: formLongDesc || formDesc, // Fallback if long description empty
+      longDescription: formLongDesc || formDesc,
       imageUrl: formImage,
       demoUrl: formDemo,
-      tags: formTags ? formTags.split(',').map(t => t.trim()) : ["React", "Tailwind"],
+      tags: formTags ? formTags.split(',').map(t => t.trim()).filter(Boolean) : ["React", "Tailwind"],
       team: ["Admin Contributor"],
-      date: "Newly Added"
+      date: currentMonthYear
     };
 
-    setProjects([newProject, ...projects]);
-    
-    // Reset fields
-    setFormTitle('');
-    setFormDesc('');
-    setFormLongDesc('');
-    setFormImage('');
-    setFormDemo('');
-    setFormTags('');
-    setIsAddModalOpen(false);
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .insert([newProject])
+        .select();
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setProjects(prev => [data[0], ...prev]);
+        setIsAddModalOpen(false);
+        
+        // Reset fields
+        setFormTitle('');
+        setFormDesc('');
+        setFormLongDesc('');
+        setFormImage('');
+        setFormDemo('');
+        setFormTags('');
+      }
+    } catch (error) {
+      alert('ไม่สามารถบันทึกโปรเจกต์ได้: ' + error.message);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-50 py-12 transition-colors duration-200">
@@ -106,22 +160,24 @@ export default function Projects() {
           </h1>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          {/* Admin Role Toggle */}
-          <button 
-            onClick={() => setIsAdmin(!isAdmin)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium border text-xs transition-all shadow-sm ${
-              isAdmin 
-                ? 'bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-400' 
-                : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800'
-            }`}
-          >
-            <Shield className="w-3.5 h-3.5" />
-            <span>{isAdmin ? 'Admin View' : 'Public View'}</span>
-          </button>
-
-          {/* Conditional Admin Action Button */}
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+          {/* ซ่อนปุ่มสลับมุมมองจาก General User: แสดงให้เห็นเฉพาะแอดมินตัวจริงเท่านั้น */}
           {isAdmin && (
+            <button 
+              onClick={() => setIsAdminView(!isAdminView)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium border text-xs transition-all shadow-sm ${
+                isAdminView 
+                  ? 'bg-amber-500/10 border-amber-500 text-amber-600 dark:text-amber-400' 
+                  : 'bg-white dark:bg-zinc-900 border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800'
+              }`}
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>{isAdminView ? 'Admin View' : 'User View'}</span>
+            </button>
+          )}
+
+          {/* ซ่อนปุ่ม Add Project จาก General User */}
+          {showAdminFeatures && (
             <button
               onClick={() => setIsAddModalOpen(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs shadow-md shadow-blue-500/10 transition-all transform active:scale-95"
@@ -133,73 +189,80 @@ export default function Projects() {
         </div>
       </div>
 
-      {/* Projects List Layout Grid */}
-      <div className="max-w-6xl mx-auto px-4 space-y-6">
-        {projects.map((project) => (
-          <div
-            key={project.id}
-            onClick={() => setSelectedProject(project)}
-            className="group flex flex-col md:flex-row bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800/80 rounded-2xl shadow-sm hover:shadow-xl hover:border-slate-300 dark:hover:border-zinc-700 transition-all duration-300 overflow-hidden cursor-pointer"
-          >
-            {/* Left Column: Thumbnail Image Window */}
-            <div className="w-full md:w-80 h-52 md:h-auto overflow-hidden relative shrink-0 bg-slate-100 dark:bg-zinc-800">
-              <img
-                src={project.imageUrl}
-                alt={project.title}
-                className="w-full h-full object-cover transform scale-100 group-hover:scale-105 transition-transform duration-500 ease-out"
-                loading="lazy"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-
-            {/* Right Column: Text & Content Area */}
-            <div className="flex-1 p-6 md:p-8 flex flex-col justify-between relative">
-              <div className="space-y-3">
-                {/* Tech Tags Container */}
-                <div className="flex flex-wrap gap-1.5">
-                  {project.tags.map((tag, idx) => (
-                    <span 
-                      key={idx} 
-                      className="px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 border border-slate-200/40 dark:border-zinc-700/40"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-
-                {/* Primary Labels */}
-                <h3 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-zinc-100 tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                  {project.title}
-                </h3>
-                
-                <p className="text-sm text-slate-600 dark:text-zinc-400 font-normal leading-relaxed max-w-3xl line-clamp-3 md:line-clamp-2">
-                  {project.description}
-                </p>
+      {/* เงื่อนไขตรวจสอบ: ถ้าหากไม่มี Projects ให้ขึ้นว่า There are currently no published project. */}
+      {projects.length === 0 ? (
+        <div className="max-w-6xl mx-auto px-4 py-16 text-center">
+          <p className="text-lg font-medium text-slate-400 dark:text-zinc-500">
+            There are currently no published project.
+          </p>
+        </div>
+      ) : (
+        /* Projects List Layout Grid */
+        <div className="max-w-6xl mx-auto px-4 space-y-6">
+          {projects.map((project) => (
+            <div
+              key={project.id}
+              onClick={() => setSelectedProject(project)}
+              className="group flex flex-col md:flex-row bg-white dark:bg-zinc-900 border border-slate-200/80 dark:border-zinc-800/80 rounded-2xl shadow-sm hover:shadow-xl hover:border-slate-300 dark:hover:border-zinc-700 transition-all duration-300 overflow-hidden cursor-pointer"
+            >
+              {/* Left Column: Thumbnail Image Window */}
+              <div className="w-full md:w-80 h-52 md:h-auto overflow-hidden relative shrink-0 bg-slate-100 dark:bg-zinc-800">
+                <img
+                  src={project.imageUrl}
+                  alt={project.title}
+                  className="w-full h-full object-cover transform scale-100 group-hover:scale-105 transition-transform duration-500 ease-out"
+                  loading="lazy"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
 
-              {/* Bottom Row Information & Core Action */}
-              <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100 dark:border-zinc-800/60">
-                <div className="flex items-center gap-4 text-xs text-slate-400 dark:text-zinc-500">
-                  <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {project.date}</span>
+              {/* Right Column: Text & Content Area */}
+              <div className="flex-1 p-6 md:p-8 flex flex-col justify-between relative">
+                <div className="space-y-3">
+                  {/* Tech Tags Container */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {project.tags && project.tags.map((tag, idx) => (
+                      <span 
+                        key={idx} 
+                        className="px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-zinc-800/60 text-slate-500 dark:text-zinc-400 border border-slate-200/40 dark:border-zinc-700/40"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Primary Labels */}
+                  <h3 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-zinc-100 tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                    {project.title}
+                  </h3>
+                  
+                  <p className="text-sm text-slate-600 dark:text-zinc-400 font-normal leading-relaxed max-w-3xl line-clamp-3 md:line-clamp-2">
+                    {project.description}
+                  </p>
                 </div>
 
-                {/* Stop propagation guarantees button clicks bypass the parent modal modal-open trigger */}
-                <a
-                  href={project.demoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-950 transition-colors group/btn shadow-sm"
-                >
-                  <span>Try Demo</span>
-                  <ExternalLink className="w-3.5 h-3.5 transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
-                </a>
+                {/* Bottom Row Information & Core Action */}
+                <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100 dark:border-zinc-800/60">
+                  <div className="flex items-center gap-4 text-xs text-slate-400 dark:text-zinc-500">
+                    <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {project.date}</span>
+                  </div>
+
+                  <a
+                    href={project.demoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-950 transition-colors group/btn shadow-sm"
+                  >
+                    <span>Try Demo</span>
+                    <ExternalLink className="w-3.5 h-3.5 transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
+                  </a>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
-
+          ))}
+        </div>
+      )}
 
       {/* PROJECT CASE STUDY / METRICS VIEW MODAL */}
       {selectedProject && (
@@ -244,7 +307,7 @@ export default function Projects() {
                     <Code className="w-3.5 h-3.5" /> Stack Specifications
                   </span>
                   <div className="flex flex-wrap gap-1 mt-1">
-                    {selectedProject.tags.map((tag, idx) => (
+                    {selectedProject.tags && selectedProject.tags.map((tag, idx) => (
                       <span key={idx} className="text-xs font-medium text-slate-800 dark:text-zinc-200 bg-white dark:bg-zinc-800 border border-slate-200/60 dark:border-zinc-700/60 px-2 py-0.5 rounded-md">
                         {tag}
                       </span>
@@ -257,7 +320,7 @@ export default function Projects() {
                     <Users className="w-3.5 h-3.5" /> Systems Engineering Team
                   </span>
                   <p className="text-xs font-medium text-slate-700 dark:text-zinc-300 mt-1">
-                    {selectedProject.team.join(', ')}
+                    {selectedProject.team && selectedProject.team.join(', ')}
                   </p>
                 </div>
               </div>
@@ -327,15 +390,30 @@ export default function Projects() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-1">Image Endpoint Unsplash URL</label>
-                  <input 
-                    type="url" required value={formImage} onChange={(e) => setFormImage(e.target.value)}
-                    placeholder="https://images.unsplash.com/..."
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
-                  />
+                {/* แก้ไขส่วนกรอก URL รูปภาพ เป็นช่องสำหรับอัปโหลดไฟล์จริง */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-1">Project Cover Image *</label>
+                  <div className="flex flex-col items-center justify-center p-4 border border-dashed rounded-xl bg-slate-50 dark:bg-zinc-950/20 border-slate-200 dark:border-zinc-800">
+                    <label className="cursor-pointer flex flex-col items-center justify-center space-y-1 w-full h-full py-2">
+                      {isUploading ? (
+                        <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                      ) : formImage ? (
+                        <div className="flex items-center space-x-2">
+                          <img src={formImage} alt="preview" className="w-16 h-12 object-cover rounded-md border" />
+                          <span className="text-xs text-green-600 font-medium">อัปโหลดรูปภาพเรียบร้อยแล้ว</span>
+                        </div>
+                      ) : (
+                        <>
+                          <ImageIcon className="w-6 h-6 text-slate-400" />
+                          <span className="text-xs text-blue-600 font-medium">กดเลือกไฟล์รูปภาพเพื่ออัปโหลด</span>
+                        </>
+                      )}
+                      <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                    </label>
+                  </div>
                 </div>
-                <div>
+
+                <div className="sm:col-span-2">
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 mb-1">Live Deployment Link</label>
                   <input 
                     type="url" required value={formDemo} onChange={(e) => setFormDemo(e.target.value)}
@@ -364,7 +442,8 @@ export default function Projects() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/10"
+                  disabled={isUploading}
+                  className="px-4 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/10 disabled:bg-slate-400"
                 >
                   Publish Asset
                 </button>
