@@ -11,6 +11,7 @@ import About from './page/About';
 import Posts from './page/Posts';
 import Projects from './page/Projects';
 import Courses from './page/Courses';
+import MockExam from './page/MockExam';
 import SignUp from './page/SignUp';
 import LogIn from './page/LogIn'; // สะกดด้วย I ตัวใหญ่ ตรงกับชื่อไฟล์จริง
 
@@ -32,6 +33,7 @@ export default function App() {
                   <Route path="/posts" element={<Posts />} />
                   <Route path="/projects" element={<Projects />} />
                   <Route path="/courses" element={<Courses />} />
+                  <Route path="/mock" element={<MockExam />} />
                   <Route path="/signup" element={<SignUp />} />
                   <Route path="/login" element={<LogIn />} />
                 </Routes>

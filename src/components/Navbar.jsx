@@ -20,6 +20,7 @@ export default function Navbar() {
     { name: 'Home', path: '/' },
     { name: 'Projects', path: '/projects' },
     { name: 'Courses', path: '/courses' },
+    { name: 'Mock Exam', path: '/mock' },
     { name: 'Posts', path: '/posts' },
   ];
 
