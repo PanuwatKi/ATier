@@ -64,10 +64,6 @@ export default function Courses() {
     try {
       setLoading(true);
 
-      // 🔒 [แก้จุดค้าง] สั่งอัปเดต/ตรวจสอบ Session ปัจจุบันให้สดใหม่ก่อนดึงข้อมูลเสมอ 
-      // วิธีนี้จะช่วยล้าง Token ที่บูดหรือค้าง ป้องกันเบราว์เซอร์เอ๋อจนเกิด Timeout
-      await supabase.auth.getSession();
-
       const { data, error } = await supabase
         .from('courses')
         .select('*')
@@ -367,7 +363,7 @@ export default function Courses() {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 flex flex-col justify-center items-center">
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500"></div>
-        <p className="mt-3 text-xs font-bold text-slate-400">กำลังเชื่อมโยงคลังข้อมูลหลังบ้าน Supabase... หากนานเกินไปแนะนำให้ไปที่ atier-rouge.vercel.app แล้วลองอีกครั้ง...</p>
+        <p className="mt-3 text-xs font-bold text-slate-400">กำลังเชื่อมโยงคลังข้อมูลหลังบ้าน Supabase...</p>
       </div>
     );
   }

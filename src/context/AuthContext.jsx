@@ -5,10 +5,12 @@ const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null); // ✨ สเตทสำหรับเก็บสิทธิ์ผู้ใช้
+  const [role, setRole] = useState(null); // สิทธิ์ผู้ใช้ ('Super Admin' | 'Admin' | 'General User')
   const [loading, setLoading] = useState(true);
 
-  // 🔍 ฟังก์ชันดึงค่าสิทธิ์ (role) จากตาราง public.profiles ข้ามตาราง
+  // 🔍 ดึงค่าสิทธิ์ (role) จากตาราง public.profiles
+  // ⚠️ ห้าม await ฟังก์ชันนี้ "ภายใน" callback ของ onAuthStateChange เด็ดขาด
+  // เพราะ supabase-js ถือ lock อยู่ระหว่าง callback ทำให้ client ค้าง (deadlock)
   const fetchUserRole = async (userId) => {
     try {
       const { data, error } = await supabase
@@ -16,65 +18,75 @@ export function AuthProvider({ children }) {
         .select('role')
         .eq('id', userId)
         .single();
-      
+
       if (error) throw error;
-      setRole(data?.role ?? null); // บันทึกสิทธิ์ เช่น 'Super Admin' หรือ 'Admin' ลงสเตท
+      setRole(data?.role ?? null);
     } catch (err) {
-      console.error("Error fetching user role from profiles:", err.message);
+      console.error('Error fetching user role from profiles:', err.message);
       setRole(null);
     }
   };
 
   useEffect(() => {
-    // 1. ตรวจสอบ Session ปัจจุบันเมื่อเปิดเว็บขึ้นมาครั้งแรก
-    const initializeAuth = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) throw error;
+    let mounted = true;
 
+    // 🛟 กันหน้าจอ Loading หมุนค้างตลอดกาล: ปลดล็อกแน่นอนภายใน 5 วินาที
+    const safety = setTimeout(() => {
+      if (mounted) setLoading(false);
+    }, 5000);
+
+    // 1) ตรวจ session ปัจจุบันตอนเปิดเว็บครั้งแรก
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (!mounted) return;
         const currentUser = session?.user ?? null;
         setUser(currentUser);
-        
         if (currentUser) {
-          await fetchUserRole(currentUser.id); // ดึงสิทธิ์มาเก็บก่อนปิด Loading
+          // เรียกแบบไม่ await — ไม่บล็อกการ render และ role จะถูกเติมตามมาทันที
+          fetchUserRole(currentUser.id);
         } else {
           setRole(null);
         }
-      } catch (err) {
-        console.error("❌ Auth Initialization Error:", err.message);
+        setLoading(false);
+        clearTimeout(safety);
+      })
+      .catch((err) => {
+        console.error('❌ Auth Initialization Error:', err.message);
+        if (!mounted) return;
         setUser(null);
         setRole(null);
-      } finally {
-        // 🌟 ปิดหน้าจอโหลดแน่นอน 100% ไม่ว่าจะโหลดสำเร็จหรือเกิด Error
-        setLoading(false); 
-      }
-    };
-
-    initializeAuth();
-
-    // 2. เฝ้าติดตามการเปลี่ยนแปลงสถานะระบบ (เช่น มีการ Login, Logout หรือ Background Token Refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      try {
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
-        
-        if (currentUser) {
-          await fetchUserRole(currentUser.id); // ดึงสิทธิ์ใหม่ทันทีที่ล็อกอินสำเร็จ
-        } else {
-          setRole(null); // ล้างสิทธิ์เมื่อออกจากระบบ
-        }
-      } catch (err) {
-        console.error("❌ Auth State Change Error:", err.message);
-      } finally {
-        // 🌟 มั่นใจว่าสเตทโหลดจะถูกเคลียร์ออกเมื่อระบบ Auth ทำงานเบื้องหลังเสร็จสิ้น
         setLoading(false);
+        clearTimeout(safety);
+      });
+
+    // 2) เฝ้าติดตามการเปลี่ยนสถานะ (login / logout / token refresh)
+    //    callback นี้ต้อง "เบา" — ห้ามมี await supabase ข้างใน ให้ defer ออกไปแทน
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      setLoading(false);
+      if (currentUser) {
+        // เลื่อนการ query ออกนอก callback เพื่อเลี่ยง deadlock ของ supabase-js
+        setTimeout(() => {
+          if (mounted) fetchUserRole(currentUser.id);
+        }, 0);
+      } else {
+        setRole(null);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      clearTimeout(safety);
+      subscription.unsubscribe();
+    };
   }, []);
 
-  // ฟังก์ชันสมัครสมาชิก
+  // ฟังก์ชันสมัครสมาชิกด้วยอีเมล
   const signUp = (email, password) => supabase.auth.signUp({ email, password });
 
   // ฟังก์ชันล็อกอินด้วยอีเมล
@@ -85,10 +97,11 @@ export function AuthProvider({ children }) {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin, // ตรวจสอบให้ตรงกับ URL เว็บของคุณ
+        // กลับมาที่ origin เดิมที่ผู้ใช้กดล็อกอิน (ต้องอยู่ใน Redirect allow-list ของ Supabase)
+        redirectTo: window.location.origin,
       },
     });
-    if (error) console.error("Error logging in with Google:", error.message);
+    if (error) console.error('Error logging in with Google:', error.message);
   };
 
   // ฟังก์ชันล็อกเอาต์
@@ -96,24 +109,22 @@ export function AuthProvider({ children }) {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      
-      setUser(null); 
-      setRole(null); // เคลียร์ค่าสิทธิ์หลังล็อกเอาต์สำเร็จ
-      console.log("Logged out successfully");
+      setUser(null);
+      setRole(null);
     } catch (error) {
-      console.error("Error logging out:", error.message);
+      console.error('Error logging out:', error.message);
     }
   };
 
   const value = {
     user,
-    role, // ✨ ส่งออกค่า role ไปให้หน้า Home และ Courses นำไปตรวจสอบสิทธิ์
+    role,
     signUp,
     logIn,
     logout,
-    signOut: logout, 
+    signOut: logout,
     loginWithGoogle,
-    loading
+    loading,
   };
 
   return (
@@ -121,8 +132,7 @@ export function AuthProvider({ children }) {
       {loading ? (
         <div className="flex min-h-screen items-center justify-center bg-white dark:bg-gray-900 text-gray-500">
           <div className="text-center space-y-2">
-            {/* ใส่ไอคอนหมุน/เอฟเฟกต์ pulse ให้นุ่มนวลขึ้น */}
-            <p className="animate-pulse font-medium text-sm">กำลังตรวจสอบสิทธิ์เข้าใช้งานระบบ โปรดรอสักครู่... ถ้าหากนานเกินไปให้เข้าไปที่ atier-rouge.vercel.app นะครับ</p>
+            <p className="animate-pulse font-medium text-sm">กำลังตรวจสอบสิทธิ์เข้าใช้งานระบบ โปรดรอสักครู่...</p>
           </div>
         </div>
       ) : (

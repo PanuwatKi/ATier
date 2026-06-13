@@ -13,7 +13,9 @@ import {
   Sparkles,
   Image as ImageIcon, // นำเข้าไอคอนสำหรับอัปโหลดรูป
   Loader2, // นำเข้าตัวโหลดแอนิเมชัน
-  Trash2
+  Trash2,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 export default function Projects() {
@@ -29,6 +31,10 @@ export default function Projects() {
 
   // ตรวจสอบฟีเจอร์แอดมิน (ต้องเป็นแอดมินจริง และอยู่ในโหมดแอดมินวิว)
   const showAdminFeatures = isAdmin && isAdminView;
+
+  // โปรเจกต์ที่แสดงผล: ผู้ใช้ทั่วไป (และแอดมินที่สลับไป User View) จะไม่เห็นที่ถูกซ่อน
+  // หมายเหตุ: RLS หลังบ้านก็กรองให้อยู่แล้ว นี่คือกันซ้ำชั้นหน้าเว็บสำหรับโหมดพรีวิว
+  const visibleProjects = projects.filter((p) => showAdminFeatures || !p.is_hidden);
 
   const [selectedProject, setSelectedProject] = useState(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -163,6 +169,24 @@ export default function Projects() {
     }
   };
 
+  // เปิด/ปิดการเผยแพร่โปรเจกต์ (publish = แสดงต่อสาธารณะ / hide = ซ่อนเป็นฉบับร่าง)
+  const toggleProjectVisibility = async (project, e) => {
+    if (e) e.stopPropagation();
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({ is_hidden: !project.is_hidden })
+        .eq('id', project.id);
+
+      if (error) throw error;
+      setProjects((prev) =>
+        prev.map((p) => (p.id === project.id ? { ...p, is_hidden: !p.is_hidden } : p))
+      );
+    } catch (error) {
+      alert('ไม่สามารถเปลี่ยนสถานะการเผยแพร่ได้: ' + error.message);
+    }
+  };
+
   const clearForm = () => {
     setFormTitle('');
     setFormDesc('');
@@ -226,16 +250,16 @@ export default function Projects() {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
             <Loader2 className="animate-spin text-blue-600" size={32} />
-            <p className="text-xs text-slate-400">Loading... ถ้านานเกินไปให้ไปที่ atier-rouge.vercel.app แล้วลองอีกครั้งนะครับ...</p>
+            <p className="text-xs text-slate-400">Loading...</p>
           </div>
-        ) : projects.length === 0 ? (
+        ) : visibleProjects.length === 0 ? (
           <div className="text-center py-20 bg-white dark:bg-zinc-900 rounded-3xl border border-slate-100 dark:border-zinc-900 shadow-sm">
             <FolderGit2 className="mx-auto text-slate-300 dark:text-zinc-700 mb-3" size={40} />
             <p className="text-sm font-medium text-slate-400">There are currently no published project.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projects.map((project) => (
+            {visibleProjects.map((project) => (
               <div
                 key={project.id}
                 onClick={() => setSelectedProject(project)}
@@ -249,16 +273,34 @@ export default function Projects() {
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                  
-                  {/* Delete Button for Admin */}
+
+                  {/* ป้ายสถานะซ่อน (เห็นเฉพาะแอดมิน) */}
+                  {project.is_hidden && (
+                    <span className="absolute top-3 left-3 bg-amber-500/90 text-white text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-md backdrop-blur-sm">
+                      HIDDEN
+                    </span>
+                  )}
+
+                  {/* ปุ่มควบคุมสำหรับแอดมิน: เผยแพร่/ซ่อน + ลบ */}
                   {showAdminFeatures && (
-                    <button
-                      onClick={(e) => handleDeleteProject(project.id, e)}
-                      className="absolute top-3 right-3 p-2 bg-red-600/90 hover:bg-red-600 text-white rounded-xl shadow-md backdrop-blur-sm transition-colors"
-                      title="ลบโปรเจกต์"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    <div className="absolute top-3 right-3 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={(e) => toggleProjectVisibility(project, e)}
+                        className={`p-2 rounded-xl shadow-md backdrop-blur-sm text-white transition-colors ${
+                          project.is_hidden ? 'bg-amber-600/90 hover:bg-amber-600' : 'bg-slate-900/70 hover:bg-slate-900'
+                        }`}
+                        title={project.is_hidden ? 'เผยแพร่ (แสดงต่อสาธารณะ)' : 'ซ่อนโปรเจกต์'}
+                      >
+                        {project.is_hidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteProject(project.id, e)}
+                        className="p-2 bg-red-600/90 hover:bg-red-600 text-white rounded-xl shadow-md backdrop-blur-sm transition-colors"
+                        title="ลบโปรเจกต์"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   )}
                 </div>
 
