@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Receipt, Settings as SettingsIcon, Check, X, Eye, Loader2, Save,
-  ShieldAlert, Clock, CheckCircle2, XCircle,
+  ShieldAlert, Clock, CheckCircle2, XCircle, MessageSquare,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import * as pay from '../lib/paymentApi';
@@ -12,7 +12,7 @@ export default function Payments() {
   const isSuperAdmin = role === 'Super Admin' || role === 'super_admin';
 
   const [tab, setTab] = useState('pending');
-  const [filter, setFilter] = useState('pending'); // pending | all
+  const [filter, setFilter] = useState('pending'); // pending | issues | all
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [slipUrls, setSlipUrls] = useState({}); // paymentId -> signed url
@@ -22,7 +22,10 @@ export default function Payments() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setPayments(await pay.adminListPayments(filter === 'all' ? null : 'pending'));
+      const status = filter === 'pending' ? 'pending' : null;
+      let rows = await pay.adminListPayments(status);
+      if (filter === 'issues') rows = rows.filter((p) => p.user_message && p.user_message.trim());
+      setPayments(rows);
     } catch (e) {
       console.error(e);
     } finally {
@@ -137,7 +140,7 @@ export default function Payments() {
         {tab === 'pending' && (
           <>
             <div className="flex gap-2 mb-4">
-              {[['pending', 'รอตรวจสอบ'], ['all', 'ทั้งหมด']].map(([k, l]) => (
+              {[['pending', 'รอตรวจสอบ'], ['issues', 'แจ้งปัญหา'], ['all', 'ทั้งหมด']].map(([k, l]) => (
                 <button
                   key={k}
                   onClick={() => setFilter(k)}
@@ -164,13 +167,24 @@ export default function Payments() {
                           <p className="text-sm font-bold text-slate-800 dark:text-zinc-100">{p.item_title}</p>
                           <span className="text-[9px] uppercase font-bold text-slate-400">{p.item_type}</span>
                           {statusBadge(p.status)}
+                          {p.user_message && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                              <MessageSquare className="w-3 h-3" /> แจ้งปัญหา
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
                           {p.user_name || p.user_email || p.user_id}
                           {p.user_email && p.user_name ? ` · ${p.user_email}` : ''}
                         </p>
                         <p className="text-[10px] text-slate-400 mt-0.5">{new Date(p.created_at).toLocaleString('th-TH')}</p>
-                        {p.note && <p className="text-[11px] text-amber-600 mt-1">หมายเหตุ: {p.note}</p>}
+                        {p.note && <p className="text-[11px] text-amber-600 mt-1">หมายเหตุถึงผู้ใช้: {p.note}</p>}
+                        {p.user_message && (
+                          <p className="text-[11px] text-blue-600 dark:text-blue-400 mt-1 flex items-start gap-1 bg-blue-500/5 border border-blue-500/20 rounded-lg px-2 py-1">
+                            <MessageSquare className="w-3 h-3 mt-0.5 shrink-0" />
+                            <span><strong>ผู้ใช้แจ้งปัญหา:</strong> {p.user_message}</span>
+                          </p>
+                        )}
                       </div>
                       <p className="text-lg font-extrabold text-blue-600 dark:text-blue-400">{formatTHB(p.amount)}</p>
                     </div>
