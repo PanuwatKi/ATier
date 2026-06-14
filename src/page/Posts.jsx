@@ -23,6 +23,12 @@ import { useAuth } from '../context/AuthContext';
 // 🔌 นำเข้า supabase client
 import { supabase } from '../supabaseClient'; 
 
+const TZ = 'Asia/Bangkok';
+const fmtThaiDate = (iso) =>
+  iso ? new Date(iso).toLocaleDateString('th-TH-u-ca-gregory', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: TZ }) : 'เมื่อสักครู่';
+const fmtThaiTime = (iso) =>
+  iso ? new Date(iso).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ }) + ' น.' : '';
+
 export default function Posts() {
   // 👥 เรียกใช้ข้อมูล User และ Role จากระบบส่วนกลาง
   const { user, role } = useAuth();
@@ -421,7 +427,7 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 dark:text-zinc-500 font-medium">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-blue-500" /> {post.author || "System"}</span>
-          <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {post.created_at ? new Date(post.created_at).toLocaleDateString('th-TH', {day:'numeric', month:'short', year:'numeric'}) : "Just now"}</span>
+          <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {fmtThaiDate(post.created_at)}</span>
           
           {/* ป้ายกำกับแจ้งเตือนสถานะ Hidden บนโพสต์ */}
           {post.is_hidden && (
@@ -455,7 +461,7 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
               </button>
             </div>
           )}
-          <span className="flex items-center gap-1.5 bg-slate-50 dark:bg-zinc-950 px-2.5 py-1 rounded-md text-[11px] font-semibold"><Clock className="w-3.5 h-3.5" /> Out of service</span>
+          <span className="flex items-center gap-1.5 bg-slate-50 dark:bg-zinc-950 px-2.5 py-1 rounded-md text-[11px] font-semibold"><Clock className="w-3.5 h-3.5" /> {fmtThaiTime(post.created_at)}</span>
         </div>
       </div>
 

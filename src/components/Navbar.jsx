@@ -16,15 +16,15 @@ export default function Navbar() {
   // ตรวจสอบสิทธิ์จากฐานข้อมูลก่อน หากไม่มีค่อยดึงจาก metadata หรือ fallback เป็น User
   const displayRole = role || user?.user_metadata?.role || "User";
 
-  const isAdmin = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin';
+  const isSuperAdmin = role === 'Super Admin' || role === 'super_admin';
   const navLinks = [
     { name: 'Home', path: '/' },
     { name: 'Projects', path: '/projects' },
     { name: 'Courses', path: '/courses' },
     { name: 'Mock Exam', path: '/mock' },
-    { name: 'Promotions', path: '/promotions' },
     { name: 'Posts', path: '/posts' },
-    ...(isAdmin ? [{ name: 'Admin', path: '/payments' }] : []),
+    { name: 'Promotions', path: '/promotions' },
+    ...(isSuperAdmin ? [{ name: 'Payment System', path: '/payments' }] : []),
   ];
 
   return (

@@ -9,8 +9,7 @@ import { formatTHB } from '../lib/pricing';
 
 export default function Payments() {
   const { role } = useAuth();
-  const isAdmin =
-    role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin';
+  const isSuperAdmin = role === 'Super Admin' || role === 'super_admin';
 
   const [tab, setTab] = useState('pending');
   const [filter, setFilter] = useState('pending'); // pending | all
@@ -32,14 +31,14 @@ export default function Payments() {
   }, [filter]);
 
   useEffect(() => {
-    if (isAdmin) load();
-  }, [isAdmin, load]);
+    if (isSuperAdmin) load();
+  }, [isSuperAdmin, load]);
 
   useEffect(() => {
-    if (isAdmin && tab === 'settings' && !settings) {
+    if (isSuperAdmin && tab === 'settings' && !settings) {
       pay.getSettings().then(setSettings).catch((e) => console.error(e));
     }
-  }, [isAdmin, tab, settings]);
+  }, [isSuperAdmin, tab, settings]);
 
   const viewSlip = async (p) => {
     if (!p.slip_url) return alert('ผู้ใช้ยังไม่ได้แนบสลิป');
@@ -83,12 +82,12 @@ export default function Payments() {
     }
   };
 
-  if (!isAdmin) {
+  if (!isSuperAdmin) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center text-center px-4">
         <ShieldAlert className="w-12 h-12 text-amber-500 mb-3" />
         <h1 className="text-lg font-bold">เฉพาะผู้ดูแลระบบ</h1>
-        <p className="text-sm text-slate-400 mt-1">หน้านี้สำหรับ Admin / Super Admin เท่านั้น</p>
+        <p className="text-sm text-slate-400 mt-1">หน้านี้สำหรับ Super Admin เท่านั้น</p>
       </div>
     );
   }
