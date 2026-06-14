@@ -106,3 +106,25 @@ export async function reportPaymentIssue(paymentId, message) {
   });
   if (error) throw error;
 }
+
+export async function adminPaymentCounts() {
+  const { data, error } = await supabase.rpc('admin_payment_counts');
+  if (error) throw error;
+  return data || { pending: 0, issues: 0 };
+}
+
+// Delete one payment and its slip file (super admin). Access is kept.
+export async function adminDeletePayment(id) {
+  const { data, error } = await supabase.rpc('admin_delete_payment', { p_payment_id: id });
+  if (error) throw error;
+  if (data) await supabase.storage.from('payment-slips').remove([data]);
+}
+
+// Bulk clear: scope 'resolved' (default) or 'all'. Also removes slip files.
+export async function adminClearPayments(scope = 'resolved') {
+  const { data, error } = await supabase.rpc('admin_clear_payments', { p_scope: scope });
+  if (error) throw error;
+  const paths = (data || []).filter(Boolean);
+  if (paths.length) await supabase.storage.from('payment-slips').remove(paths);
+  return paths.length;
+}

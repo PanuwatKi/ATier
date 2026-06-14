@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { Sun, Moon, Menu, X, Shield, User, LogOut } from 'lucide-react';
+import * as pay from '../lib/paymentApi';
 
 export default function Navbar() {
   // 👑 ดึงค่า role มาจาก AuthContext โดยตรง เพื่อให้แสดงสิทธิ์ Super Admin จาก Supabase
@@ -17,6 +18,20 @@ export default function Navbar() {
   const displayRole = role || user?.user_metadata?.role || "User";
 
   const isSuperAdmin = role === 'Super Admin' || role === 'super_admin';
+
+  // Payment System attention counts (super admin only) — refresh on navigation
+  const [payCounts, setPayCounts] = useState({ pending: 0, issues: 0 });
+  useEffect(() => {
+    if (!isSuperAdmin) {
+      setPayCounts({ pending: 0, issues: 0 });
+      return;
+    }
+    let active = true;
+    pay.adminPaymentCounts().then((c) => active && setPayCounts(c)).catch(() => {});
+    return () => { active = false; };
+  }, [isSuperAdmin, location.pathname]);
+  const payBadge = (payCounts.pending || 0) + (payCounts.issues || 0);
+
   const navLinks = [
     { name: 'Home', path: '/' },
     { name: 'Projects', path: '/projects' },
@@ -43,13 +58,16 @@ export default function Navbar() {
               <Link
                 key={link.path}
                 to={link.path}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-250 ${
+                className={`inline-flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all duration-250 ${
                   isActive(link.path)
                     ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400'
                     : 'hover:bg-gray-100 dark:hover:bg-gray-900 text-gray-600 dark:text-gray-300'
                 }`}
               >
                 {link.name}
+                {link.path === '/payments' && payBadge > 0 && (
+                  <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-red-500 rounded-full">{payBadge}</span>
+                )}
               </Link>
             ))}
           </div>
@@ -117,13 +135,18 @@ export default function Navbar() {
               key={link.path}
               to={link.path}
               onClick={() => setIsOpen(false)}
-              className={`block px-3 py-2 rounded-lg text-base font-medium transition-all ${
+              className={`flex items-center justify-between px-3 py-2 rounded-lg text-base font-medium transition-all ${
                 isActive(link.path)
                   ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400'
                   : 'hover:bg-gray-100 dark:hover:bg-gray-900 text-gray-600 dark:text-gray-300'
               }`}
             >
-              {link.name}
+              <span>{link.name}</span>
+              {link.path === '/payments' && payBadge > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[10px] font-bold text-white bg-red-500 rounded-full">
+                  รอ {payCounts.pending} · ปัญหา {payCounts.issues}
+                </span>
+              )}
             </Link>
           ))}
 

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Receipt, Settings as SettingsIcon, Check, X, Eye, Loader2, Save,
-  ShieldAlert, Clock, CheckCircle2, XCircle, MessageSquare,
+  ShieldAlert, Clock, CheckCircle2, XCircle, MessageSquare, Trash2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import * as pay from '../lib/paymentApi';
 import { formatTHB } from '../lib/pricing';
+import { toast } from '../lib/toast';
 
 export default function Payments() {
   const { role } = useAuth();
@@ -18,6 +19,7 @@ export default function Payments() {
   const [slipUrls, setSlipUrls] = useState({}); // paymentId -> signed url
   const [settings, setSettings] = useState(null);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [counts, setCounts] = useState({ pending: 0, issues: 0 });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -26,6 +28,7 @@ export default function Payments() {
       let rows = await pay.adminListPayments(status);
       if (filter === 'issues') rows = rows.filter((p) => p.user_message && p.user_message.trim());
       setPayments(rows);
+      setCounts(await pay.adminPaymentCounts());
     } catch (e) {
       console.error(e);
     } finally {
@@ -65,7 +68,32 @@ export default function Payments() {
       await pay.adminReviewPayment(p.payment_id, approve, note);
       load();
     } catch (e) {
-      alert('ดำเนินการไม่สำเร็จ: ' + e.message);
+      toast.error('ดำเนินการไม่สำเร็จ: ' + e.message);
+    }
+  };
+
+  const deleteOne = async (p) => {
+    if (!window.confirm('ลบรายการนี้ออกจากระบบ? (สิทธิ์การเข้าถึงของผู้ใช้จะยังคงอยู่)')) return;
+    try {
+      await pay.adminDeletePayment(p.payment_id);
+      toast.success('ลบรายการเรียบร้อย');
+      load();
+    } catch (e) {
+      toast.error('ลบไม่สำเร็จ: ' + e.message);
+    }
+  };
+
+  const clearPayments = async (scope) => {
+    const msg = scope === 'all'
+      ? 'ลบรายการชำระเงินทั้งหมด รวมที่ยังรอตรวจสอบ? (สิทธิ์การเข้าถึงของผู้ใช้จะยังคงอยู่)'
+      : 'ล้างรายการที่จัดการแล้วทั้งหมด (อนุมัติ/ปฏิเสธ/ยกเลิก)?';
+    if (!window.confirm(msg)) return;
+    try {
+      const n = await pay.adminClearPayments(scope);
+      toast.success(`ล้างรายการเรียบร้อย (ลบไฟล์สลิป ${n} ไฟล์)`);
+      load();
+    } catch (e) {
+      toast.error('ล้างไม่สำเร็จ: ' + e.message);
     }
   };
 
@@ -139,16 +167,26 @@ export default function Payments() {
 
         {tab === 'pending' && (
           <>
-            <div className="flex gap-2 mb-4">
-              {[['pending', 'รอตรวจสอบ'], ['issues', 'แจ้งปัญหา'], ['all', 'ทั้งหมด']].map(([k, l]) => (
-                <button
-                  key={k}
-                  onClick={() => setFilter(k)}
-                  className={`px-3 py-1.5 rounded-lg text-[11px] font-bold ${filter === k ? 'bg-slate-800 dark:bg-zinc-200 text-white dark:text-zinc-900' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500'}`}
-                >
-                  {l}
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <div className="flex gap-2">
+                {[['pending', `รอตรวจสอบ (${counts.pending})`], ['issues', `แจ้งปัญหา (${counts.issues})`], ['all', 'ทั้งหมด']].map(([k, l]) => (
+                  <button
+                    key={k}
+                    onClick={() => setFilter(k)}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold ${filter === k ? 'bg-slate-800 dark:bg-zinc-200 text-white dark:text-zinc-900' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500'}`}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => clearPayments('resolved')} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700">
+                  <Trash2 className="w-3.5 h-3.5" /> ล้างที่จัดการแล้ว
                 </button>
-              ))}
+                <button onClick={() => clearPayments('all')} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-red-500/10 text-red-500 hover:bg-red-500/20">
+                  <Trash2 className="w-3.5 h-3.5" /> ลบทั้งหมด
+                </button>
+              </div>
             </div>
 
             {loading ? (
@@ -213,6 +251,13 @@ export default function Payments() {
                           </button>
                         </>
                       )}
+                      <button
+                        onClick={() => deleteOne(p)}
+                        title="ลบรายการนี้"
+                        className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-500 text-[11px] font-bold hover:bg-red-100 dark:hover:bg-red-950/50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> ลบ
+                      </button>
                     </div>
                   </div>
                 ))}
