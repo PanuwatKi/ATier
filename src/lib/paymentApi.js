@@ -87,3 +87,22 @@ export async function ownedSet() {
   const list = await myEnrollments();
   return new Set(list.map((e) => `${e.item_type}:${e.item_id}`));
 }
+
+export async function myEnrollmentsDetailed() {
+  const { data, error } = await supabase.rpc('my_enrollments_detailed');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function cancelPayment(paymentId) {
+  const { error } = await supabase.rpc('cancel_payment', { p_payment_id: paymentId });
+  if (error) throw error;
+}
+
+export async function reportPaymentIssue(paymentId, message) {
+  const { error } = await supabase.rpc('report_payment_issue', {
+    p_payment_id: paymentId,
+    p_message: message,
+  });
+  if (error) throw error;
+}

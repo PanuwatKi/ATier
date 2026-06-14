@@ -66,19 +66,21 @@ export default function Navbar() {
               <div className="h-8 w-8 animate-pulse rounded-full bg-gray-300 dark:bg-gray-700" />
             ) : user ? (
               <div className="flex items-center space-x-3 bg-gray-50 dark:bg-gray-900/50 pl-3 pr-2 py-1 rounded-full border border-gray-200 dark:border-gray-800">
-                <div className="flex flex-col items-end">
-                  <span className="text-xs font-semibold max-w-[100px] truncate">
-                    {user.user_metadata?.full_name || user.email.split('@')[0]}
-                  </span>
-                  <span className="flex items-center text-[10px] font-bold text-emerald-500">
-                    <Shield size={10} className="mr-0.5" /> {displayRole}
-                  </span>
-                </div>
-                {user.user_metadata?.avatar_url ? (
-                  <img src={user.user_metadata.avatar_url} alt="profile" className="h-8 w-8 rounded-full border border-blue-500" />
-                ) : (
-                  <div className="p-1.5 bg-blue-500 rounded-full text-white"><User size={16} /></div>
-                )}
+                <Link to="/account" title="บัญชีของฉัน" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
+                  <div className="flex flex-col items-end">
+                    <span className="text-xs font-semibold max-w-[100px] truncate">
+                      {user.user_metadata?.full_name || user.email.split('@')[0]}
+                    </span>
+                    <span className="flex items-center text-[10px] font-bold text-emerald-500">
+                      <Shield size={10} className="mr-0.5" /> {displayRole}
+                    </span>
+                  </div>
+                  {user.user_metadata?.avatar_url ? (
+                    <img src={user.user_metadata.avatar_url} alt="profile" className="h-8 w-8 rounded-full border border-blue-500" />
+                  ) : (
+                    <div className="p-1.5 bg-blue-500 rounded-full text-white"><User size={16} /></div>
+                  )}
+                </Link>
                 <button
                   onClick={logout}
                   className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
@@ -130,8 +132,8 @@ export default function Navbar() {
             {loading ? (
               <div className="h-10 animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800" />
             ) : user ? (
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
+              <div className="space-y-1">
+                <Link to="/account" onClick={() => setIsOpen(false)} className="flex items-center gap-2 min-w-0 py-1">
                   {user.user_metadata?.avatar_url ? (
                     <img src={user.user_metadata.avatar_url} alt="profile" className="h-9 w-9 rounded-full border border-blue-500" />
                   ) : (
@@ -145,10 +147,13 @@ export default function Navbar() {
                       <Shield size={10} className="mr-0.5" /> {displayRole}
                     </span>
                   </div>
-                </div>
+                </Link>
+                <Link to="/account" onClick={() => setIsOpen(false)} className="block px-1 py-2 text-sm font-medium text-blue-600 dark:text-blue-400">
+                  บัญชีของฉัน
+                </Link>
                 <button
                   onClick={() => { logout(); setIsOpen(false); }}
-                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30"
+                  className="flex items-center gap-1.5 px-1 py-2 text-sm font-semibold text-red-500 w-full"
                 >
                   <LogOut size={16} /> ออกจากระบบ
                 </button>

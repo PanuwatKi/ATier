@@ -5,6 +5,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ErrorBoundary from './components/ErrorBoundary';
+import Toaster from './components/Toaster';
 
 // Code-split each route so the initial bundle stays small and pages load on demand.
 const Home = lazy(() => import('./page/Home'));
@@ -17,6 +18,8 @@ const Promotions = lazy(() => import('./page/Promotions'));
 const Payments = lazy(() => import('./page/Payments'));
 const SignUp = lazy(() => import('./page/SignUp'));
 const LogIn = lazy(() => import('./page/LogIn'));
+const Account = lazy(() => import('./page/Account'));
+const Terms = lazy(() => import('./page/Terms'));
 
 function PageLoader() {
   return (
@@ -44,6 +47,7 @@ export default function App() {
       <ThemeProvider>
         <Router>
           <div className="flex min-h-screen flex-col justify-between bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+            <Toaster />
             <div>
               <Navbar />
               <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
@@ -60,6 +64,8 @@ export default function App() {
                       <Route path="/payments" element={<Payments />} />
                       <Route path="/signup" element={<SignUp />} />
                       <Route path="/login" element={<LogIn />} />
+                      <Route path="/account" element={<Account />} />
+                      <Route path="/terms" element={<Terms />} />
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </Suspense>

@@ -25,6 +25,7 @@ export default function Footer() {
             <Link to="/projects" className="hover:text-blue-500 dark:hover:text-blue-400 transition-colors">Projects</Link>
             <Link to="/courses" className="hover:text-blue-500 dark:hover:text-blue-400 transition-colors">Courses</Link>
             <Link to="/posts" className="hover:text-blue-500 dark:hover:text-blue-400 transition-colors">Posts</Link>
+            <Link to="/terms" className="hover:text-blue-500 dark:hover:text-blue-400 transition-colors">เงื่อนไข &amp; ความเป็นส่วนตัว</Link>
           </div>
           
         </div>
