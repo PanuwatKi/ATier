@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import {
   Clock, ListChecks, Play, RotateCcw, Plus, Pencil, Eye, EyeOff,
-  Trash2, History, Award, X, Loader2, LogIn,
+  Trash2, History, Award, X, Loader2, LogIn, Tag,
 } from 'lucide-react';
 import * as mock from '../../lib/mockApi';
+import { effectivePrice, hasActiveDiscount, discountPercent, formatTHB } from '../../lib/pricing';
 
 function fmtDuration(seconds) {
   if (!seconds || seconds <= 0) return 'ไม่จำกัดเวลา';
@@ -15,7 +16,7 @@ function fmtDuration(seconds) {
 }
 
 export default function ExamList({
-  exams, loading, isAdmin, user, onStart, onViewResults, onCreate, onEdit, onChanged, onLogin,
+  exams, loading, isAdmin, user, onStart, onViewResults, onCreate, onEdit, onChanged, onLogin, onBuy,
 }) {
   const [historyExam, setHistoryExam] = useState(null);
   const [history, setHistory] = useState([]);
@@ -124,12 +125,37 @@ export default function ExamList({
                       <Award className="w-3.5 h-3.5" /> Best {Math.round(exam.my_best ?? 0)}%
                     </span>
                   )}
+                  {exam.is_paid && !exam.has_access && (
+                    <span className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400">
+                      <Tag className="w-3.5 h-3.5" />
+                      {hasActiveDiscount(exam) && <span className="line-through text-slate-400 font-normal">{formatTHB(exam.price)}</span>}
+                      {formatTHB(effectivePrice(exam))}
+                      {hasActiveDiscount(exam) && <span className="text-[9px] bg-red-500 text-white px-1 rounded">-{discountPercent(exam)}%</span>}
+                    </span>
+                  )}
+                  {exam.is_paid && exam.has_access && !isAdmin && (
+                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold">ซื้อแล้ว</span>
+                  )}
                 </div>
               </div>
 
               {/* Actions */}
               <div className="px-5 pb-5 pt-2 border-t border-slate-50 dark:border-zinc-800/60 space-y-2">
-                {user ? (
+                {!user ? (
+                  <button
+                    onClick={onLogin}
+                    className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 text-xs font-bold transition-colors"
+                  >
+                    <LogIn className="w-4 h-4" /> เข้าสู่ระบบเพื่อเริ่มทำ
+                  </button>
+                ) : exam.is_paid && !exam.has_access ? (
+                  <button
+                    onClick={() => onBuy(exam)}
+                    className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors"
+                  >
+                    <Tag className="w-4 h-4" /> ซื้อ {formatTHB(effectivePrice(exam))}
+                  </button>
+                ) : (
                   <button
                     onClick={() => onStart(exam.id)}
                     disabled={exam.question_count === 0}
@@ -142,13 +168,6 @@ export default function ExamList({
                     ) : (
                       <><Play className="w-4 h-4" /> เริ่มทำข้อสอบ</>
                     )}
-                  </button>
-                ) : (
-                  <button
-                    onClick={onLogin}
-                    className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-zinc-100 dark:hover:bg-white text-white dark:text-zinc-900 text-xs font-bold transition-colors"
-                  >
-                    <LogIn className="w-4 h-4" /> เข้าสู่ระบบเพื่อเริ่มทำ
                   </button>
                 )}
 

@@ -5,6 +5,9 @@ import {
 } from 'lucide-react';
 import * as mock from '../../lib/mockApi';
 
+const toLocalInput = (iso) => (iso ? new Date(iso).toISOString().slice(0, 16) : '');
+const toISO = (local) => (local ? new Date(local).toISOString() : null);
+
 /* --------------------------- Question editor --------------------------- */
 function QuestionEditor({ examId, question, orderIndex, onSaved, onCancel }) {
   const [text, setText] = useState(question?.question_text || '');
@@ -253,6 +256,12 @@ export default function ExamBuilder({ examId, onDone, onCancel }) {
     shuffle_options: true,
     pass_percent: 50,
     is_hidden: false,
+    is_paid: false,
+    price: 0,
+    discount_type: '',
+    discount_value: 0,
+    discount_starts_at: '',
+    discount_ends_at: '',
   });
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(!!examId);
@@ -276,6 +285,12 @@ export default function ExamBuilder({ examId, onDone, onCancel }) {
         shuffle_options: exam.shuffle_options,
         pass_percent: exam.pass_percent,
         is_hidden: exam.is_hidden,
+        is_paid: exam.is_paid,
+        price: exam.price || 0,
+        discount_type: exam.discount_type || '',
+        discount_value: exam.discount_value || 0,
+        discount_starts_at: toLocalInput(exam.discount_starts_at),
+        discount_ends_at: toLocalInput(exam.discount_ends_at),
       });
       setQuestions(questions);
     } catch (e) {
@@ -297,6 +312,12 @@ export default function ExamBuilder({ examId, onDone, onCancel }) {
         shuffle_options: meta.shuffle_options,
         pass_percent: Number(meta.pass_percent) || 0,
         is_hidden: meta.is_hidden,
+        is_paid: !!meta.is_paid,
+        price: Number(meta.price) || 0,
+        discount_type: meta.discount_type || null,
+        discount_value: Number(meta.discount_value) || 0,
+        discount_starts_at: toISO(meta.discount_starts_at),
+        discount_ends_at: toISO(meta.discount_ends_at),
       };
       if (id) {
         await mock.updateExam(id, payload);
@@ -436,7 +457,46 @@ export default function ExamBuilder({ examId, onDone, onCancel }) {
             <input type="checkbox" checked={meta.is_hidden} onChange={(e) => setMeta({ ...meta, is_hidden: e.target.checked })} />
             ซ่อนข้อสอบ (ยังไม่เผยแพร่)
           </label>
+          <label className="inline-flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={meta.is_paid} onChange={(e) => setMeta({ ...meta, is_paid: e.target.checked })} />
+            เก็บเงินข้อสอบนี้
+          </label>
         </div>
+
+        {meta.is_paid && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800">
+            <div>
+              <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">ราคา (บาท)</label>
+              <input type="number" min="0" value={meta.price} onChange={(e) => setMeta({ ...meta, price: e.target.value })} className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-blue-500" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">ส่วนลด</label>
+                <select value={meta.discount_type} onChange={(e) => setMeta({ ...meta, discount_type: e.target.value })} className="w-full px-2 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs">
+                  <option value="">ไม่มี</option>
+                  <option value="percent">ลด %</option>
+                  <option value="amount">ลดบาท</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">มูลค่า</label>
+                <input type="number" min="0" value={meta.discount_value} onChange={(e) => setMeta({ ...meta, discount_value: e.target.value })} className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-sm focus:outline-none focus:border-blue-500" />
+              </div>
+            </div>
+            {meta.discount_type && (
+              <>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">เริ่มโปร (เว้นว่าง=ทันที)</label>
+                  <input type="datetime-local" value={meta.discount_starts_at} onChange={(e) => setMeta({ ...meta, discount_starts_at: e.target.value })} className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">สิ้นสุดโปร (เว้นว่าง=ไม่จำกัด)</label>
+                  <input type="datetime-local" value={meta.discount_ends_at} onChange={(e) => setMeta({ ...meta, discount_ends_at: e.target.value })} className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl text-xs" />
+                </div>
+              </>
+            )}
+          </div>
+        )}
         <div className="flex justify-end">
           <button
             onClick={saveMeta}

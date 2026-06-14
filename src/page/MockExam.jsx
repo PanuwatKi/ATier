@@ -6,6 +6,7 @@ import ExamList from '../components/mock/ExamList';
 import ExamBuilder from '../components/mock/ExamBuilder';
 import ExamRunner from '../components/mock/ExamRunner';
 import ExamResults from '../components/mock/ExamResults';
+import CheckoutModal from '../components/CheckoutModal';
 
 export default function MockExam() {
   const { user, role, loginWithGoogle } = useAuth();
@@ -20,6 +21,7 @@ export default function MockExam() {
   const [editExamId, setEditExamId] = useState(null); // null = create new
   const [attempt, setAttempt] = useState(null); // sanitized payload for the runner
   const [results, setResults] = useState(null); // graded payload for the results screen
+  const [checkoutItem, setCheckoutItem] = useState(null); // {type,id,title} for paid exams
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -125,6 +127,15 @@ export default function MockExam() {
             onEdit={handleEdit}
             onChanged={refresh}
             onLogin={loginWithGoogle}
+            onBuy={(exam) => setCheckoutItem({ type: 'exam', id: exam.id, title: exam.title })}
+          />
+        )}
+
+        {checkoutItem && (
+          <CheckoutModal
+            item={checkoutItem}
+            onClose={() => setCheckoutItem(null)}
+            onEnrolled={refresh}
           />
         )}
 
