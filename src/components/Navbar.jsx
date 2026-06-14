@@ -121,6 +121,44 @@ export default function Navbar() {
               {link.name}
             </Link>
           ))}
+
+          {/* 🔐 ส่วนล็อกอิน/โปรไฟล์สำหรับจอมือถือ (เดิมอยู่ในโซนเดสก์ท็อปเท่านั้น ทำให้มือถือล็อกอินไม่ได้) */}
+          <div className="pt-3 mt-2 border-t border-gray-200 dark:border-gray-800">
+            {loading ? (
+              <div className="h-10 animate-pulse rounded-xl bg-gray-200 dark:bg-gray-800" />
+            ) : user ? (
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  {user.user_metadata?.avatar_url ? (
+                    <img src={user.user_metadata.avatar_url} alt="profile" className="h-9 w-9 rounded-full border border-blue-500" />
+                  ) : (
+                    <div className="p-2 bg-blue-500 rounded-full text-white"><User size={16} /></div>
+                  )}
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-sm font-semibold truncate">
+                      {user.user_metadata?.full_name || user.email.split('@')[0]}
+                    </span>
+                    <span className="flex items-center text-[10px] font-bold text-emerald-500">
+                      <Shield size={10} className="mr-0.5" /> {displayRole}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { logout(); setIsOpen(false); }}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30"
+                >
+                  <LogOut size={16} /> ออกจากระบบ
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { loginWithGoogle(); setIsOpen(false); }}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl active:scale-95 transition-all"
+              >
+                Login with Google
+              </button>
+            )}
+          </div>
         </div>
       )}
     </nav>
