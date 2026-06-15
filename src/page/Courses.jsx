@@ -14,9 +14,9 @@ const toLocalInput = (iso) => (iso ? new Date(iso).toISOString().slice(0, 16) : 
 const toISO = (local) => (local ? new Date(local).toISOString() : null);
 
 export default function Courses() {
-  const { user, role } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [isAdminModeActive, setIsAdminModeActive] = useState(false);
-  const isAdminUser = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin';
+  const isAdminUser = isAdmin;
 
   useEffect(() => {
     if (!isAdminUser) setIsAdminModeActive(false);
@@ -60,6 +60,36 @@ export default function Courses() {
   useEffect(() => {
     localStorage.setItem('atier_last_watched', JSON.stringify(lastWatchedTape));
   }, [lastWatchedTape]);
+
+  // 🔄 โหลดความคืบหน้าการเรียนจาก DB (ตามผู้ใช้ข้ามเครื่อง) แล้ว merge กับ localStorage
+  useEffect(() => {
+    if (!user) return;
+    supabase.rpc('get_my_progress').then(({ data }) => {
+      if (!data) return;
+      const comp = {};
+      const last = {};
+      data.forEach((row) => {
+        (row.completed || []).forEach((lid) => { comp[lid] = true; });
+        if (row.last_lecture_id) last[row.course_id] = row.last_lecture_id;
+      });
+      setCompletedLectures((prev) => ({ ...prev, ...comp }));
+      setLastWatchedTape((prev) => ({ ...prev, ...last }));
+    }).catch(() => {});
+  }, [user]);
+
+  // 💾 บันทึกความคืบหน้าของคอร์สที่กำลังเปิดอยู่ลง DB (debounce)
+  useEffect(() => {
+    if (!user || !selectedCourse?.id || !selectedCourse.lectures) return;
+    const completedIds = (selectedCourse.lectures || []).filter((l) => completedLectures[l.id]).map((l) => l.id);
+    const t = setTimeout(() => {
+      supabase.rpc('save_course_progress', {
+        p_course_id: String(selectedCourse.id),
+        p_completed: completedIds,
+        p_last_lecture_id: lastWatchedTape[selectedCourse.id] || null,
+      }).catch(() => {});
+    }, 800);
+    return () => clearTimeout(t);
+  }, [completedLectures, lastWatchedTape, user, selectedCourse]);
 
   const courseHasAccess = (c) => isAdminUser || !c.isPaid || enrolledSet.has(`course:${c.id}`);
 

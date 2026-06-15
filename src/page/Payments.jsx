@@ -9,8 +9,7 @@ import { formatTHB } from '../lib/pricing';
 import { toast } from '../lib/toast';
 
 export default function Payments() {
-  const { role } = useAuth();
-  const isSuperAdmin = role === 'Super Admin' || role === 'super_admin';
+  const { isSuperAdmin } = useAuth();
 
   const [tab, setTab] = useState('pending');
   const [filter, setFilter] = useState('pending'); // pending | issues | all

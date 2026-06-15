@@ -119,6 +119,9 @@ export function AuthProvider({ children }) {
   const value = {
     user,
     role,
+    // สิทธิ์รวมศูนย์ — ใช้แทนการเช็ค role string กระจายตามไฟล์
+    isAdmin: role === 'Admin' || role === 'Super Admin',
+    isSuperAdmin: role === 'Super Admin',
     signUp,
     logIn,
     logout,

@@ -9,9 +9,7 @@ import ExamResults from '../components/mock/ExamResults';
 import CheckoutModal from '../components/CheckoutModal';
 
 export default function MockExam() {
-  const { user, role, loginWithGoogle } = useAuth();
-  const isAdmin =
-    role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin';
+  const { user, isAdmin, loginWithGoogle } = useAuth();
 
   const [view, setView] = useState('list'); // 'list' | 'build' | 'take' | 'result'
   const [exams, setExams] = useState([]);

@@ -7,7 +7,7 @@ import * as pay from '../lib/paymentApi';
 
 export default function Navbar() {
   // 👑 ดึงค่า role มาจาก AuthContext โดยตรง เพื่อให้แสดงสิทธิ์ Super Admin จาก Supabase
-  const { user, role, loading, loginWithGoogle, logout } = useAuth();
+  const { user, role, loading, loginWithGoogle, logout, isAdmin, isSuperAdmin } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
@@ -16,8 +16,6 @@ export default function Navbar() {
 
   // ตรวจสอบสิทธิ์จากฐานข้อมูลก่อน หากไม่มีค่อยดึงจาก metadata หรือ fallback เป็น User
   const displayRole = role || user?.user_metadata?.role || "User";
-
-  const isSuperAdmin = role === 'Super Admin' || role === 'super_admin';
 
   // Payment System attention counts (super admin only) — refresh on navigation
   const [payCounts, setPayCounts] = useState({ pending: 0, issues: 0 });
@@ -39,6 +37,7 @@ export default function Navbar() {
     { name: 'Mock Exam', path: '/mock' },
     { name: 'Posts', path: '/posts' },
     { name: 'Promotions', path: '/promotions' },
+    ...(isAdmin ? [{ name: 'Dashboard', path: '/dashboard' }] : []),
     ...(isSuperAdmin ? [{ name: 'Payment System', path: '/payments' }] : []),
   ];
 

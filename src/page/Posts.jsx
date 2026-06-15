@@ -30,8 +30,8 @@ const fmtThaiTime = (iso) =>
   iso ? new Date(iso).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TZ }) + ' น.' : '';
 
 export default function Posts() {
-  // 👥 เรียกใช้ข้อมูล User และ Role จากระบบส่วนกลาง
-  const { user, role } = useAuth();
+  // 👥 เรียกใช้ข้อมูล User และสิทธิ์จากระบบส่วนกลาง
+  const { user, isAdmin: roleIsAdmin } = useAuth();
   
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,26 +49,16 @@ export default function Posts() {
   const [newTags, setNewTags] = useState('');
   const [uploading, setUploading] = useState(false);
 
-  // 🌐 ตรวจสอบสภาพแวดล้อมเพื่อความสะดวกในการพัฒนา (Localhost)
-  const isLocalDev = typeof window !== 'undefined' && (
-    window.location.hostname === 'localhost' || 
-    window.location.hostname === '127.0.0.1'
-  );
-
-  // ตรวจสอบสิทธิ์ว่าเป็นแอดมินหรือไม่
-  const isAdminUser = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin';
+  // ตรวจสอบสิทธิ์ว่าเป็นแอดมินหรือไม่ (รวมศูนย์ที่ useAuth)
+  const isAdminUser = roleIsAdmin;
 
   // ซิงค์สวิตช์โหมดการแสดงผล UI แอดมินอัตโนมัติ
   useEffect(() => {
-    if (isAdminUser || isLocalDev) {
-      setIsAdminModeActive(true);
-    } else {
-      setIsAdminModeActive(false);
-    }
-  }, [role, isAdminUser, isLocalDev]);
+    setIsAdminModeActive(isAdminUser);
+  }, [isAdminUser]);
 
-  // 🛡️ ตัวแปรตัดสินสุดท้ายในการแสดงผล UI แอดมินบนหน้าเว็บ
-  const isAdmin = (isAdminUser || isLocalDev) && isAdminModeActive;
+  // ตัวแปรตัดสินสุดท้ายในการแสดงผล UI แอดมิน
+  const isAdmin = isAdminUser && isAdminModeActive;
 
   // 🔄 ดึงข้อมูลและเชื่อมต่อระบบ Real-time Sync
   const fetchPosts = async () => {
@@ -100,6 +90,14 @@ export default function Posts() {
       supabase.removeChannel(postChannel);
     };
   }, []);
+
+  // โหลดสถานะถูกใจของผู้ใช้ปัจจุบัน
+  useEffect(() => {
+    if (!user) { setLikedPosts({}); return; }
+    supabase.rpc('my_post_likes').then(({ data }) => {
+      if (data) setLikedPosts(Object.fromEntries((data || []).map((id) => [id, true])));
+    });
+  }, [user]);
 
   // 📦 ฟังก์ชันอัปโหลดไฟล์เข้า Storage Bucket
   const uploadToStorage = async (file, folder) => {
@@ -175,31 +173,27 @@ export default function Posts() {
   };
 
   const handleLike = async (post) => {
-    const alreadyLiked = likedPosts[post.id];
-    const updatedLikes = alreadyLiked ? Math.max(0, post.likes - 1) : post.likes + 1;
-    setLikedPosts(prev => ({ ...prev, [post.id]: !alreadyLiked }));
-    
-    await supabase.rpc('increment_like_secure', { 
-      post_id_param: post.id, 
-      updated_likes: updatedLikes 
-    });
+    if (!user) { alert('กรุณาเข้าสู่ระบบก่อนกดถูกใจ'); return; }
+    try {
+      const { data, error } = await supabase.rpc('toggle_post_like', { p_post_id: post.id });
+      if (error) throw error;
+      setLikedPosts(prev => ({ ...prev, [post.id]: data.liked }));
+      setPosts(prev => prev.map(p => (p.id === post.id ? { ...p, likes: data.likes } : p)));
+    } catch (e) {
+      alert('กดถูกใจไม่สำเร็จ: ' + e.message);
+    }
   };
 
-  const handleAddComment = async (postId, existingComments, text) => {
+  const handleAddComment = async (postId, _existingComments, text) => {
     if (!text.trim()) return;
-    const commentatorName = user?.user_metadata?.full_name || user?.email || "Anonymous Student";
-    const newCommentObj = {
-      id: `comment-${Date.now()}`,
-      author: commentatorName,
-      text: text,
-      date: "Just now"
-    };
-    const updatedComments = [...(existingComments || []), newCommentObj];
-    
-    await supabase.rpc('add_comment_secure', { 
-      post_id_param: postId, 
-      updated_comments: updatedComments 
-    });
+    if (!user) { alert('กรุณาเข้าสู่ระบบก่อนแสดงความคิดเห็น'); return; }
+    try {
+      const { error } = await supabase.rpc('add_post_comment', { p_post_id: postId, p_text: text });
+      if (error) throw error;
+      // ระบบ Real-time จะรีเฟรชให้เห็นคอมเมนต์ใหม่อัตโนมัติ
+    } catch (e) {
+      alert('แสดงความคิดเห็นไม่สำเร็จ: ' + e.message);
+    }
   };
 
   // ⚙️ ฟังก์ชันอัปเดตตั้งค่าแบบไดนามิก (เปิด/ปิดดาวน์โหลด, คอมเมนต์, ซ่อนโพสต์)
@@ -370,7 +364,7 @@ export default function Posts() {
       </div>
 
       {/* 🛠️ DEV MODE FLOATING PANEL: ปุ่มสลับโหมดจำลองสิทธิ์ที่ควบคุม UI ได้จริง */}
-      {(isLocalDev || isAdminUser) && (
+      {isAdminUser && (
         <div className="fixed bottom-4 right-4 z-50 bg-zinc-900 border border-zinc-800 p-3 rounded-2xl shadow-xl flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400">
             <Wrench className="w-3.5 h-3.5" />
@@ -407,10 +401,7 @@ function PostCard({ post, isAdmin, likedPosts, handleLike, handleAddComment, tog
         viewedHistory.push(post.id);
         sessionStorage.setItem('atier_viewed_chronicles', JSON.stringify(viewedHistory));
         
-        await supabase.rpc('increment_view_secure', { 
-          post_id_param: post.id, 
-          updated_views: (post.views || 0) + 1 
-        });
+        await supabase.rpc('increment_post_view', { p_post_id: post.id });
       }
     };
     triggerViewIncrement();

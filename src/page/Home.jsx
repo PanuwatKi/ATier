@@ -20,9 +20,8 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../supabaseClient'; 
 
 export default function Home() {
-  const { role } = useAuth();
-  // เช็คสิทธิ์ว่าเป็นแอดมินหรือไม่
-  const isAdmin = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin';
+  // เช็คสิทธิ์ว่าเป็นแอดมินหรือไม่ (รวมศูนย์ที่ useAuth)
+  const { isAdmin } = useAuth();
 
   // ✨ State สำหรับสลับโหมดมุมมอง (เปิดให้ Admin สลับเป็น User View ได้)
   const [isAdminView, setIsAdminView] = useState(true);

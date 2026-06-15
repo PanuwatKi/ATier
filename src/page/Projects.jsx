@@ -20,8 +20,7 @@ import {
 
 export default function Projects() {
   // ดึงข้อมูลสิทธิ์จาก AuthContext จริง
-  const { role } = useAuth();
-  const isAdmin = role === 'Admin' || role === 'Super Admin' || role === 'admin' || role === 'super_admin';
+  const { isAdmin } = useAuth();
 
   // State สำหรับจัดการข้อมูลและการแสดงผล
   const [projects, setProjects] = useState([]);

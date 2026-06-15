@@ -20,6 +20,7 @@ const SignUp = lazy(() => import('./page/SignUp'));
 const LogIn = lazy(() => import('./page/LogIn'));
 const Account = lazy(() => import('./page/Account'));
 const Terms = lazy(() => import('./page/Terms'));
+const Dashboard = lazy(() => import('./page/Dashboard'));
 
 function PageLoader() {
   return (
@@ -66,6 +67,7 @@ export default function App() {
                       <Route path="/login" element={<LogIn />} />
                       <Route path="/account" element={<Account />} />
                       <Route path="/terms" element={<Terms />} />
+                      <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </Suspense>
