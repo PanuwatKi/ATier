@@ -20,7 +20,7 @@ export default function Courses() {
 
   useEffect(() => {
     if (!isAdminUser) setIsAdminModeActive(false);
-  }, [role, isAdminUser]);
+  }, [isAdminUser]);
 
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
